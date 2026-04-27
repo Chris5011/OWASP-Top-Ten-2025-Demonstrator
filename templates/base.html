@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Injection Visualizer{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cyberrange.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+    <div>
+        <h1>Injection Visualizer</h1>
+        <p>Interactive teaching aids for OWASP-style injection concepts.</p>
+    </div>
+</header>
+
+<main class="layout">
+    <aside class="card sidebar">
+        <h2>Modules</h2>
+
+        <nav class="nav">
+            <a class="{% if active_page == 'home' %}active{% endif %}" href="{{ url_for('index') }}">
+                🏠 Overview
+            </a>
+
+            <a class="{% if active_page == 'sql_login' %}active{% endif %}" href="{{ url_for('sql_login') }}">
+                🗄️ SQL Injection
+            </a>
+
+            <a class="{% if active_page == 'command' %}active{% endif %}" href="{{ url_for('command_injection') }}">
+                💻 Command Injection
+            </a>
+
+            <a class="{% if active_page == 'xss' %}active{% endif %}" href="{{ url_for('xss_injection') }}">
+                🌐 XSS
+            </a>
+
+            <a class="{% if active_page == 'ldap' %}active{% endif %}" href="{{ url_for('ldap_injection') }}">
+                📁 LDAP Injection
+            </a>
+            <a class="{% if active_page == 'xml' %}active{% endif %}" href="{{ url_for('xml_injection') }}">
+                🧾 XML Injection
+            </a>
+
+            <a class="{% if active_page == 'nosql' %}active{% endif %}" href="{{ url_for('nosql_injection') }}">
+                🍃 NoSQL Injection
+            </a>
+
+            <a class="{% if active_page == 'smuggling' %}active{% endif %}" href="{{ url_for('request_smuggling') }}">
+                📦 HTTP Request Smuggling
+            </a>
+            <a class="{% if active_page == 'prevention_detection' %}active{% endif %}" href="{{ url_for('prevention_detection') }}">
+                🛡️ Prevention & Detection
+            </a>
+        </nav>
+
+
+    </aside>
+
+    <section class="content">
+        {% block content %}{% endblock %}
+    </section>
+</main>
+
+</body>
+</html>

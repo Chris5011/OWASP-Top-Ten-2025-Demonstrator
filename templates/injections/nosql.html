@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}NoSQL Injection Visualizer{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>NoSQL Injection: MongoDB-style Login Example</h2>
+    <p class="hint">
+        This demo shows how input can become part of a MongoDB-style query object.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Enter Login Data</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Username
+                <input type="text" name="username" value="{{ username }}" placeholder="admin">
+            </label>
+
+            <label>
+                Password
+                <input type="text" name="password" value="{{ password }}" placeholder="password">
+            </label>
+
+            <label>
+                Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Unsafe: Query Object From Input</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Safe: Strict String Parameters</option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Execute Query</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Examples to Try</h2>
+        <div class="examples">
+            <div class="example">admin / password</div>
+            <div class="example">admin / wrongpassword</div>
+            <div class="example">admin / { "$ne": null }</div>
+            <div class="example">{ "$ne": null } / anything</div>
+            <div class="example">{ "$where": "true" } / anything</div>
+        </div>
+    </section>
+</div>
+
+{% if nosql_output %}
+<section class="card">
+    <h2>3. Generated MongoDB-style Query</h2>
+    <div class="mode-box {% if mode == 'unsafe' %}unsafe{% else %}safe{% endif %}">
+        <div class="query">{{ nosql_output }}</div>
+    </div>
+</section>
+{% endif %}
+
+{% if result %}
+<section class="card">
+    <h2>4. Simulated Result</h2>
+    <div class="result {{ result_class }}">{{ result }}</div>
+    <div class="query">{{ simulated_output }}</div>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Teaching Point</h2>
+    <p class="hint">
+        NoSQL injection happens when input becomes a query operator or query expression
+        instead of a literal value.
+    </p>
+</section>
+{% endblock %}

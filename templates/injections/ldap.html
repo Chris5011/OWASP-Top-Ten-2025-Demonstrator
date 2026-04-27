@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}LDAP Injection Visualizer{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>LDAP Injection: Directory Login Example</h2>
+    <p class="hint">
+        This demo pretends a web application checks credentials against a directory service.
+        The key idea is that LDAP filters also have syntax. If user input is inserted directly,
+        input can become part of the filter logic.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Enter Directory Login Data</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Username / UID
+                <input type="text" name="username" value="{{ username }}" placeholder="admin">
+            </label>
+
+            <label>
+                Password
+                <input type="text" name="password" value="{{ password }}" placeholder="password">
+            </label>
+
+            <label>
+                Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>
+                        ❌ Unsafe: Raw LDAP Filter Construction
+                    </option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>
+                        ✅ Safe: LDAP Filter Escaping
+                    </option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Execute LDAP Search</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Simulated Directory</h2>
+
+        <div class="mode-box">
+            <p><strong>Base DN:</strong> <code>{{ base_dn }}</code></p>
+            <p><strong>Entries:</strong></p>
+            <div class="query">
+uid=admin,ou=people,dc=example,dc=org<br>
+uid=alice,ou=people,dc=example,dc=org<br>
+uid=bob,ou=people,dc=example,dc=org
+            </div>
+        </div>
+
+        <h2 style="margin-top: 22px;">Examples to Try</h2>
+        <div class="examples">
+            <div class="example">admin / password</div>
+            <div class="example">alice / wrongpassword</div>
+            <div class="example">* / anything</div>
+            <div class="example">admin)(|(uid=*) / anything</div>
+            <div class="example">*)(uid=*))(|(uid=* / anything</div>
+        </div>
+    </section>
+</div>
+
+{% if ldap_filter %}
+<section class="card">
+    <h2>3. Generated LDAP Filter</h2>
+
+    {% if mode == "unsafe" %}
+        <p>
+            <span class="pill pill-red">Unsafe Mode</span>
+            User input is inserted directly into the LDAP filter.
+        </p>
+        <div class="mode-box unsafe">
+            <div class="query">{{ ldap_filter }}</div>
+        </div>
+    {% else %}
+        <p>
+            <span class="pill pill-green">Safe Mode</span>
+            Special LDAP filter characters are escaped.
+        </p>
+        <div class="mode-box safe">
+            <div class="query">{{ ldap_filter }}</div>
+        </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if result %}
+<section class="card">
+    <h2>4. Simulated Result</h2>
+    <div class="result {{ result_class }}">{{ result }}</div>
+
+    {% if simulated_output %}
+        <h2 style="margin-top: 22px;">Simulated LDAP Search Output</h2>
+        <div class="query">{{ simulated_output }}</div>
+    {% endif %}
+
+    {% if mode == "unsafe" %}
+        <p class="hint">
+            In unsafe mode, characters like <code>*</code>, <code>(</code>, <code>)</code>,
+            <code>|</code>, <code>&amp;</code>, and <code>!</code> can alter the LDAP filter.
+        </p>
+    {% else %}
+        <p class="hint">
+            In safe mode, special characters are encoded, so they are searched as literal values
+            instead of being interpreted as LDAP filter syntax.
+        </p>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Teaching Point</h2>
+    <p class="hint">
+        LDAP injection follows the same general injection pattern:
+        user input crosses from <strong>directory attribute value</strong>
+        into <strong>LDAP filter logic</strong>.
+    </p>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Unsafe</span></p>
+            <div class="query">(&amp;(uid=USER_INPUT)(userPassword=USER_INPUT))</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Safer</span></p>
+            <div class="query">(&amp;(uid=escape(USER_INPUT))(userPassword=escape(USER_INPUT)))</div>
+        </div>
+    </div>
+</section>
+{% endblock %}

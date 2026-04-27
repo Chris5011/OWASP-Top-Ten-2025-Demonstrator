@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Prevention & Detection{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>Prevention & Detection</h2>
+    <p class="hint">
+        The general pattern behind injection issues is that untrusted input crosses a boundary
+        from <strong>data</strong> into <strong>instructions</strong>. Fixes should therefore
+        enforce this separation.
+    </p>
+</section>
+
+<section class="grid-2">
+    <div class="card">
+        <h2>1. Prevent Injection</h2>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">SQL / LDAP / NoSQL</span></p>
+            <p>
+                Use parameterized queries, prepared statements, query builders,
+                or ORM defaults that bind values separately from query logic.
+            </p>
+            <div class="query">
+query = "SELECT * FROM users WHERE username = ?"<br>
+bind(username)
+            </div>
+        </div>
+
+        <br>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">XSS</span></p>
+            <p>
+                Use contextual output encoding. Encode data differently depending on whether
+                it appears in HTML text, attributes, JavaScript, CSS, or URLs.
+            </p>
+            <div class="query">
+&lt;div&gt;{{ escaped_user_input }}&lt;/div&gt;
+            </div>
+        </div>
+
+        <br>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Command Injection</span></p>
+            <p>
+                Avoid shell execution where possible. Prefer safe APIs, argument arrays,
+                allow-listed input, and fixed command structures.
+            </p>
+            <div class="query">
+subprocess.run(["ls", "-l", safe_filename], shell=False)
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. Defense-in-Depth</h2>
+
+        <div class="mode-box">
+            <p><span class="pill pill-green">CSP for XSS</span></p>
+            <p>
+                Content Security Policy can limit the impact of XSS by restricting script sources
+                and blocking inline script execution.
+            </p>
+            <div class="query">
+Content-Security-Policy: default-src 'self'; script-src 'self'
+            </div>
+        </div>
+
+        <br>
+
+        <div class="mode-box">
+            <p><span class="pill pill-green">Least Privilege</span></p>
+            <p>
+                Databases, web servers, service users, and API tokens should only have the
+                permissions they actually need.
+            </p>
+            <div class="query">
+www-data should not be able to modify system files
+            </div>
+        </div>
+
+        <br>
+
+        <div class="mode-box">
+            <p><span class="pill pill-green">Normalize / Reject Ambiguity</span></p>
+            <p>
+                For HTTP request smuggling, reject ambiguous requests and ensure front-end and
+                back-end components agree on HTTP parsing and framing.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>3. Detection Techniques</h2>
+
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><span class="pill pill-green">SAST</span></p>
+            <p>
+                Static Application Security Testing checks source code for risky patterns before
+                the application is running.
+            </p>
+
+            <div class="examples">
+                <div class="example">Semgrep: custom rules for unsafe string concatenation</div>
+                <div class="example">SonarQube: code quality and security issue detection</div>
+                <div class="example">Look for: raw SQL strings, shell=True, unsafe HTML rendering</div>
+            </div>
+        </div>
+
+        <div class="mode-box">
+            <p><span class="pill pill-green">DAST</span></p>
+            <p>
+                Dynamic Application Security Testing tests the running application from the outside.
+            </p>
+
+            <div class="examples">
+                <div class="example">OWASP ZAP active scan</div>
+                <div class="example">Fuzz input fields and parameters</div>
+                <div class="example">Watch for changed responses, errors, or unexpected behavior</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>4. Quick Mapping</h2>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Injection Type</th>
+                    <th>Primary Fix</th>
+                    <th>Detection Ideas</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>SQL Injection</td>
+                    <td>Prepared statements, ORM parameter binding</td>
+                    <td>SAST for string-built queries; DAST with ZAP</td>
+                </tr>
+                <tr>
+                    <td>Command Injection</td>
+                    <td>No shell, argument arrays, allow-listed input</td>
+                    <td>SAST for shell execution; logging unexpected metacharacters</td>
+                </tr>
+                <tr>
+                    <td>XSS</td>
+                    <td>Contextual output encoding</td>
+                    <td>SAST for unsafe sinks; DAST browser-based checks</td>
+                </tr>
+                <tr>
+                    <td>LDAP Injection</td>
+                    <td>LDAP filter escaping / safe directory APIs</td>
+                    <td>SAST for raw filter construction</td>
+                </tr>
+                <tr>
+                    <td>NoSQL Injection</td>
+                    <td>Strict schema validation, disallow query operators in user input</td>
+                    <td>SAST for user-controlled query objects</td>
+                </tr>
+                <tr>
+                    <td>HTTP Request Smuggling</td>
+                    <td>Reject ambiguous framing; align proxy/backend parsing</td>
+                    <td>DAST/proxy tests; log malformed transfer headers</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <h2>5. Teaching Summary</h2>
+    <p class="hint">
+        The safest model is:
+        <strong>never concatenate untrusted input into an interpreter language</strong>.
+        Bind, encode, validate, normalize, and restrict privileges.
+    </p>
+</section>
+{% endblock %}

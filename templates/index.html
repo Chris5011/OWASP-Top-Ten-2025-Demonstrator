@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Injection Visualizer — Overview{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>What is Injection?</h2>
+    <p class="hint">
+        Injection happens when untrusted input is interpreted as part of a command,
+        query, or script instead of being handled purely as data.
+    </p>
+
+    <div class="flow horizontal">
+        <div>👤 User Input</div>
+        <div>→</div>
+        <div>🌐 Application</div>
+        <div>→</div>
+        <div>🗄️ Interpreter</div>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="card">
+        <h2>Unsafe Pattern</h2>
+        <p>
+            The application builds commands by concatenating strings.
+        </p>
+        <div class="query">
+            query = "SELECT ... WHERE user = '" + input + "'"
+        </div>
+        <p><span class="pill pill-red">Problem</span> Input can become logic.</p>
+    </div>
+
+    <div class="card">
+        <h2>Safe Pattern</h2>
+        <p>
+            The application keeps commands and data separate.
+        </p>
+        <div class="query">
+            query = "SELECT ... WHERE user = ?"<br>
+            bind(input)
+        </div>
+        <p><span class="pill pill-green">Fix</span> Input remains data.</p>
+    </div>
+</section>
+{% endblock %}

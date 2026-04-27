@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}SQL Injection Visualizer{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>SQL Injection: Login Example</h2>
+    <p class="hint">
+        This demo shows how user input can alter the meaning of a SQL query
+        when string concatenation is used.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Enter Login Data</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Username
+                <input type="text" name="username" value="{{ username }}" placeholder="admin">
+            </label>
+
+            <label>
+                Password
+                <input type="text" name="password" value="{{ password }}" placeholder="password">
+            </label>
+
+            <label>
+                Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>
+                        ❌ Unsafe: String Concatenation
+                    </option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>
+                        ✅ Safe: Parameterized Query
+                    </option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Execute Query</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Examples to Try</h2>
+        <div class="examples">
+            <div class="example">admin / password</div>
+            <div class="example">admin / wrongpassword</div>
+            <div class="example">admin' OR '1'='1 / anything</div>
+            <div class="example">' OR '1'='1 / anything</div>
+            <div class="example">admin' -- / anything</div>
+        </div>
+    </section>
+</div>
+
+{% if query %}
+<section class="card">
+    <h2>3. Generated Query</h2>
+
+    {% if mode == "unsafe" %}
+        <p><span class="pill pill-red">Unsafe Mode</span> User input is inserted into the SQL string.</p>
+        <div class="mode-box unsafe">
+            <div class="query">{{ query }}</div>
+        </div>
+    {% else %}
+        <p><span class="pill pill-green">Safe Mode</span> User input is bound separately.</p>
+        <div class="mode-box safe">
+            <div class="query">{{ query }}</div>
+        </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if result %}
+<section class="card">
+    <h2>4. Simulated Result</h2>
+    <div class="result {{ result_class }}">{{ result }}</div>
+
+    {% if mode == "unsafe" %}
+        <p class="hint">In unsafe mode, injected input can change the query logic.</p>
+    {% else %}
+        <p class="hint">In safe mode, the query structure stays fixed.</p>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

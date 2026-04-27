@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}HTTP Request Smuggling Visualizer{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>HTTP Request Smuggling: Parser Disagreement Example</h2>
+    <p class="hint">
+        This demo shows the concept visually: a front-end proxy and a back-end server may disagree
+        about where one request ends and the next begins.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Raw HTTP Request</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Request
+                <textarea name="raw_request" rows="12">{{ raw_request }}</textarea>
+            </label>
+
+            <label>
+                Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Unsafe: Ambiguous Framing Allowed</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Safe: Normalize / Reject Ambiguity</option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Analyze Request</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Model</h2>
+        <div class="flow">
+            <div>👤 Client</div>
+            <div class="arrow">↓</div>
+            <div>🚪 Front-end Proxy</div>
+            <div class="arrow">↓</div>
+            <div>🖥️ Back-end Server</div>
+        </div>
+    </section>
+</div>
+
+{% if highlighted_request %}
+<section class="card">
+    <h2>3. Highlighted Request</h2>
+    <div class="mode-box {% if mode == 'unsafe' %}unsafe{% else %}safe{% endif %}">
+        <div class="query">{{ highlighted_request }}</div>
+    </div>
+</section>
+{% endif %}
+
+{% if result %}
+<section class="card">
+    <h2>4. Simulated Interpretation</h2>
+    <div class="result {{ result_class }}">{{ result }}</div>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <h2>Front-end View</h2>
+            <div class="query">{{ front_end_view }}</div>
+        </div>
+
+        <div class="mode-box safe">
+            <h2>Back-end View</h2>
+            <div class="query">{{ back_end_view }}</div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Teaching Point</h2>
+    <p class="hint">
+        Request smuggling is slightly different from classic injection.
+        The key issue is not just malicious input, but inconsistent parsing between HTTP components.
+    </p>
+</section>
+{% endblock %}

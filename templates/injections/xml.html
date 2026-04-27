@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}XML Injection Visualizer{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>XML Injection: Profile Update Example</h2>
+    <p class="hint">
+        This demo shows how user input can become XML markup instead of plain text.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Enter Display Name</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Display Name
+                <input type="text" name="display_name" value="{{ display_name }}" placeholder="Alice">
+            </label>
+
+            <label>
+                Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Unsafe: Raw XML Concatenation</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Safe: XML Escaping</option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Generate XML</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Examples to Try</h2>
+        <div class="examples">
+            <div class="example">Alice</div>
+            <div class="example">&lt;admin&gt;true&lt;/admin&gt;</div>
+            <div class="example">Alice&lt;/name&gt;&lt;role&gt;admin&lt;/role&gt;&lt;name&gt;</div>
+        </div>
+    </section>
+</div>
+
+{% if xml_output %}
+<section class="card">
+    <h2>3. Generated XML</h2>
+    <div class="mode-box {% if mode == 'unsafe' %}unsafe{% else %}safe{% endif %}">
+        <div class="query">{{ xml_output }}</div>
+    </div>
+</section>
+{% endif %}
+
+{% if result %}
+<section class="card">
+    <h2>4. Simulated Parser Result</h2>
+    <div class="result {{ result_class }}">{{ result }}</div>
+    <div class="query">{{ simulated_output }}</div>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Teaching Point</h2>
+    <p class="hint">
+        XML injection happens when user input changes the structure of an XML document.
+    </p>
+</section>
+{% endblock %}
