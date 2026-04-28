@@ -4,11 +4,41 @@
 
 {% block content %}
 <section class="card">
-    <h2>A09: Security Logging & Alerting Failures</h2>
+    <h2>A09: Security Logging &amp; Alerting Failures</h2>
     <p class="hint">
-        This demo shows how the same attack looks completely different
-        depending on logging quality.
+        Even a perfectly secured application can be compromised eventually.
+        When that happens, the ability to <strong>detect</strong>, <strong>investigate</strong>,
+        and <strong>respond</strong> to an attack depends entirely on the quality of your logs.
+        Without adequate logging, attackers can operate undetected for weeks or months.
+        According to industry reports, the average dwell time — the period between breach and detection —
+        is over <strong>200 days</strong> in organizations with poor logging practices.
     </p>
+</section>
+
+<section class="card">
+    <h2>What Makes a Log Security-Useful?</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Poor Log</span></p>
+            <div class="query">User login failed<br>User login failed<br>User login successful</div>
+            <ul class="hint" style="margin: 8px 0 0; padding-left: 1.2em;">
+                <li>No timestamp — when did this happen?</li>
+                <li>No identity — which user?</li>
+                <li>No source — which IP address?</li>
+                <li>No correlation — are these related events?</li>
+                <li>Unstructured text — hard to query or alert on</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Good Log (structured)</span></p>
+            <div class="query">{"ts":"10:00:01","event":"LOGIN_FAIL","user":"admin","ip":"192.168.1.50","attempt":1}<br>{"ts":"10:00:03","event":"LOGIN_FAIL","user":"admin","ip":"192.168.1.50","attempt":2}<br>{"ts":"10:00:05","event":"LOGIN_FAIL","user":"admin","ip":"192.168.1.50","attempt":3}<br>{"ts":"10:00:10","event":"LOGIN_SUCCESS","user":"admin","ip":"192.168.1.50"}<br>{"ts":"10:00:10","event":"ALERT","rule":"BRUTE_FORCE","user":"admin","ip":"192.168.1.50"}</div>
+            <ul class="hint" style="margin: 8px 0 0; padding-left: 1.2em;">
+                <li>Timestamped, attributed, and machine-readable</li>
+                <li>Correlated across events for the same user and IP</li>
+                <li>Alert fired automatically based on a detection rule</li>
+            </ul>
+        </div>
+    </div>
 </section>
 
 <section class="card">
@@ -34,19 +64,25 @@
 
 <div class="grid-2">
     <section class="card">
-        <h2>2. User Actions</h2>
+        <h2>2. Actual User Actions</h2>
 
         <div class="timeline">
             {% for e in events %}
                 <div class="event">
-                    <strong>{{ e.time }}</strong> — {{ e.type }} ({{ e.status }})
+                    <strong>{{ e.time }}</strong> — {{ e.type }}
+                    <span class="pill {% if e.status == 'fail' %}pill-red{% else %}pill-green{% endif %}">{{ e.status }}</span>
                 </div>
             {% endfor %}
         </div>
+
+        <p class="hint" style="margin-top: 12px;">
+            This is the ground truth: 3 failed logins followed by 1 success.
+            A classic brute-force attack. Compare what the logs show.
+        </p>
     </section>
 
     <section class="card">
-        <h2>3. Logs</h2>
+        <h2>3. What the Logs Show</h2>
 
         <div class="query">
             {% for log in logs %}
@@ -61,30 +97,74 @@
     <div class="result {{ detection_class }}">
         {{ detection }}
     </div>
+
+    {% if mode == "unsafe" %}
+        <p class="hint">
+            Without structure, the four events look identical. A SIEM cannot group them,
+            correlate the attempts, or fire an alert — the attack is completely invisible.
+            A security analyst reviewing these logs would see nothing unusual.
+        </p>
+    {% else %}
+        <p class="hint">
+            With timestamps, user identity, and IP address in every log entry, an alerting rule
+            can detect three failures for the same user within 10 seconds and fire immediately —
+            before the attacker moves on to the next step.
+        </p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2>What Should Be Logged?</h2>
+    <div class="grid-2">
+        <div class="mode-box safe">
+            <p><strong>Authentication &amp; Access</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Login success and failure (with username, IP, timestamp)</li>
+                <li>Password reset requests</li>
+                <li>MFA failures</li>
+                <li>Access to sensitive resources</li>
+                <li>Admin actions (role changes, user creation/deletion)</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Application Events</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Input validation failures (especially repeated ones)</li>
+                <li>Exceptions and unexpected error conditions</li>
+                <li>Data export or bulk read operations</li>
+                <li>Cryptographic failures</li>
+                <li>Rate limit violations</li>
+            </ul>
+        </div>
+    </div>
+    <div class="mode-box unsafe" style="margin-top: 8px;">
+        <p><strong>What NOT to log (data to never record)</strong></p>
+        <p class="hint">
+            Passwords and password hashes, session tokens, credit card numbers, private keys,
+            or any PII beyond what is necessary for investigation.
+            Logs are often stored less securely than databases — attacker access to logs should not
+            yield additional credentials.
+        </p>
+    </div>
 </section>
 
 <section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
-        Without structured logs, context (user, IP, timestamps), and correlation,
-        attacks remain invisible even if they are happening.
+        Logging is not just an operational concern — it is a security control.
+        Without structured, correlated, and alerting-capable logs, attackers operate in the dark.
+        Every security incident eventually becomes a logging and forensics problem.
     </p>
 
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Bad Logging</span></p>
-            <div class="query">
-User login failed<br>
-User login failed<br>
-User login successful
-            </div>
+            <div class="query">User login failed<br>User login failed<br>User login successful<br><br>→ Attack invisible, no alert fired</div>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Good Logging</span></p>
-            <div class="query">
-timestamp + user + IP + event type + correlation
-            </div>
+            <div class="query">timestamp + user + IP + event_type + attempt_count<br>→ Correlated → alert fired in seconds<br>→ Attacker detected before damage</div>
         </div>
     </div>
 </section>

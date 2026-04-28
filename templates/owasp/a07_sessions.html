@@ -5,8 +5,57 @@
 <section class="card">
     <h2>A07: Authentication Failures — Session Hijacking / Fixation</h2>
     <p class="hint">
-        This module shows how authentication can be implemented correctly, while the session lifecycle still allows account takeover.
+        A web session represents a user's authenticated identity between requests.
+        Because HTTP is stateless, the server issues a session token (usually stored in a cookie)
+        that the browser sends with every request. If an attacker obtains a valid, authenticated
+        session token, they become that user — without ever knowing the password.
     </p>
+</section>
+
+<section class="card">
+    <h2>Session Fixation vs. Session Hijacking</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Session Fixation</span></p>
+            <p class="hint">
+                The attacker plants a known session ID in the victim's browser <em>before</em> the victim logs in.
+                If the application keeps the same session ID after authentication, the attacker
+                already knows the now-authenticated ID and can use it.
+            </p>
+            <div class="query">
+1. Attacker sends victim a link with<br>   ?sessionid=KNOWN_VALUE<br>
+2. Victim logs in — same ID reused<br>
+3. Attacker uses KNOWN_VALUE → authenticated
+            </div>
+        </div>
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Session Hijacking</span></p>
+            <p class="hint">
+                The attacker steals an already-authenticated session ID from network traffic
+                (via MITM on HTTP), from a browser (via XSS), or from logs.
+                If the session is still valid, authentication is bypassed entirely.
+            </p>
+            <div class="query">
+1. Attacker intercepts / steals session cookie<br>
+2. Attacker replays cookie in own request<br>
+3. Server accepts it → authenticated
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>How Sessions Are Transmitted</h2>
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>Browser → Server (Cookie header)</strong></p>
+            <div class="query">GET /dashboard HTTP/1.1<br>Host: example.com<br>Cookie: session=ABCDEF123456</div>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Recommended Cookie Flags</strong></p>
+            <div class="query">Set-Cookie: session=...<br>  HttpOnly   ← JS cannot read it (blocks XSS theft)<br>  Secure     ← only sent over HTTPS<br>  SameSite=Strict ← blocks CSRF-based attacks</div>
+        </div>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -31,6 +80,8 @@
                     <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Safe: Rotate session ID after login</option>
                 </select>
             </label>
+
+            <p class="hint">Walk through the steps in order to simulate the attack:</p>
 
             <div class="grid-2">
                 <button type="submit" name="action" value="visit">1️⃣ Visit Page</button>
@@ -60,35 +111,16 @@ authenticated = {{ result.session.authenticated }}
 user = {{ result.session.user }}
 created_by = {{ result.session.created_by }}
         </div>
+
+        <p class="hint">
+            Watch whether the session ID changes at login step.
+            In unsafe mode it stays the same — so the attacker's pre-known ID becomes valid.
+        </p>
     </section>
 </div>
 
 <section class="card">
-    <h2>3. Attack Explanation</h2>
-
-    <div class="grid-2">
-        <div class="mode-box unsafe">
-            <p><span class="pill pill-red">Session Fixation</span></p>
-            <p class="hint">
-                The attacker forces or predicts a session ID before login.
-                If the application keeps that ID after login, the attacker can reuse it.
-            </p>
-            <div class="query">known_session_id → victim_login → attacker_reuse</div>
-        </div>
-
-        <div class="mode-box unsafe">
-            <p><span class="pill pill-red">Session Hijacking</span></p>
-            <p class="hint">
-                The attacker steals an already authenticated session ID.
-                If the session is still valid, authentication is bypassed completely.
-            </p>
-            <div class="query">stolen_session_id → authenticated_request</div>
-        </div>
-    </div>
-</section>
-
-<section class="card">
-    <h2>4. Decision Flow</h2>
+    <h2>3. Decision Flow</h2>
 
     <div class="mode-box">
         {% for step in result.decision_steps %}
@@ -98,7 +130,7 @@ created_by = {{ result.session.created_by }}
 </section>
 
 <section class="card">
-    <h2>5. Server-Side Session Store</h2>
+    <h2>4. Server-Side Session Store</h2>
 
     <div class="table-wrap">
         <table>
@@ -122,6 +154,13 @@ created_by = {{ result.session.created_by }}
             </tbody>
         </table>
     </div>
+
+    <p class="hint" style="margin-top: 8px;">
+        In safe mode, logout removes the session from the server-side store entirely.
+        Even if an attacker had stolen the old session ID, it no longer exists — the cookie is useless.
+        In unsafe mode, logout only clears the <code>authenticated</code> flag,
+        but the session ID entry still exists and could be re-authenticated.
+    </p>
 </section>
 
 <section class="card">
@@ -130,12 +169,20 @@ created_by = {{ result.session.created_by }}
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Wrong</span></p>
-            <div class="query">“The user logged in, so the session is trusted.”</div>
+            <div class="query">"The user logged in, so the session is trusted."</div>
+            <p class="hint">
+                Authentication proves who the user is. It does not prove who holds the session token.
+                If the token is predictable or was previously known, the login is irrelevant.
+            </p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better</span></p>
-            <div class="query">“Authentication must create a fresh session.”</div>
+            <div class="query">On login: invalidate old session → issue new random ID<br>On logout: delete session server-side<br>Set cookies: HttpOnly + Secure + SameSite</div>
+            <p class="hint">
+                A session rotation on login makes any previously known token useless.
+                Server-side deletion on logout ensures the token cannot be replayed.
+            </p>
         </div>
     </div>
 </section>

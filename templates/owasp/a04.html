@@ -5,8 +5,36 @@
 <section class="card">
     <h2>A04: Cryptographic Failures — Password Hashing</h2>
     <p class="hint">
-        This module compares storage approaches and shows why “hashing” alone is not enough.
-        The correct choice depends on the purpose: integrity, authenticity, or password storage.
+        Cryptographic failures occur when sensitive data is protected with the wrong tool —
+        or with no protection at all. This module focuses on password storage.
+        Many developers reach for "hashing" without understanding that <strong>not all hash functions
+        are designed for passwords</strong>. The wrong choice leaves users vulnerable even after a database breach.
+    </p>
+</section>
+
+<section class="card">
+    <h2>Why Speed Is the Enemy</h2>
+    <p class="hint">
+        When an attacker gets a copy of your database, the game becomes offline brute-forcing:
+        they hash billions of guesses per second and compare results against your stored hashes.
+    </p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Algorithm</th><th>Hashes per second (GPU)</th><th>Time to crack 8-char password</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>MD5</td><td>~60 billion</td><td>Minutes to hours</td></tr>
+                <tr><td>SHA-256</td><td>~12 billion</td><td>Hours to days</td></tr>
+                <tr><td>bcrypt (cost=12)</td><td>~150 thousand</td><td>Years</td></tr>
+                <tr><td>Argon2id (tuned)</td><td>~1 thousand</td><td>Centuries</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="hint" style="margin-top: 8px;">
+        Password hashing algorithms like Argon2id are deliberately slow and memory-intensive.
+        Their <strong>work factor</strong> can be tuned upward as hardware gets faster —
+        giving defenders a permanent advantage over offline attackers.
     </p>
 </section>
 
@@ -42,9 +70,18 @@
             {{ result.label }}
         </span></p>
 
-        <div class="query wrap">
-users.password = {{ result.stored }}
-        </div>
+        <div class="query wrap">users.password = {{ result.stored }}</div>
+
+        <p class="hint">
+            This is what an attacker reads if they dump your users table.
+            {% if mode == "plaintext" %}
+                Every password is immediately visible — no cracking needed.
+            {% elif mode in ["sha256", "salted_sha256", "hmac"] %}
+                A fast hash like this can be cracked against large wordlists within hours using a GPU cluster.
+            {% else %}
+                The hash includes the algorithm, parameters, and salt. Even with this output, cracking is computationally expensive.
+            {% endif %}
+        </p>
     </section>
 </div>
 
@@ -56,8 +93,17 @@ users.password = {{ result.stored }}
             <p><strong>Salt</strong></p>
             {% if result.salt %}
                 <div class="query wrap">{{ result.salt }}</div>
+                <p class="hint">
+                    A salt is a random value mixed into the hash input before hashing.
+                    It ensures two identical passwords produce different stored values,
+                    preventing precomputed "rainbow table" attacks.
+                </p>
             {% else %}
                 <p class="hint">{{ result.salt_note }}</p>
+                <p class="hint">
+                    Without a salt, identical passwords hash identically — an attacker can
+                    immediately find all users sharing the same password with one lookup.
+                </p>
             {% endif %}
         </div>
 
@@ -65,6 +111,11 @@ users.password = {{ result.stored }}
             <p><strong>Server-side secret / pepper</strong></p>
             {% if result.pepper %}
                 <div class="query wrap">{{ result.pepper }}</div>
+                <p class="hint">
+                    A pepper is a secret key stored outside the database (e.g., in an environment variable
+                    or hardware security module). Even with the full database dump, an attacker cannot crack
+                    peppered hashes without also stealing the pepper.
+                </p>
             {% else %}
                 <p class="hint">No separate server-side secret is used in this example.</p>
             {% endif %}
@@ -112,27 +163,33 @@ users.password = {{ result.stored }}
                 </tr>
                 <tr>
                     <td>SHA-256</td>
-                    <td>Integrity checks</td>
+                    <td>Integrity checks, checksums</td>
                     <td>❌ No</td>
-                    <td>Too fast; no per-password uniqueness without salt</td>
+                    <td>Too fast; ~12 billion hashes/sec on a modern GPU</td>
                 </tr>
                 <tr>
                     <td>Salted SHA-256</td>
                     <td>Explaining salts</td>
                     <td>⚠️ Still no</td>
-                    <td>Salt helps, but the hash is still too fast</td>
+                    <td>Salt prevents rainbow tables but hashing speed is still the problem</td>
                 </tr>
                 <tr>
                     <td>HMAC-SHA-256</td>
-                    <td>Authenticity and tamper detection</td>
+                    <td>API signatures, token integrity</td>
                     <td>⚠️ Not by itself</td>
-                    <td>Keyed integrity primitive, not a password hashing function</td>
+                    <td>Keyed MAC primitive — not designed for password work factor</td>
+                </tr>
+                <tr>
+                    <td>bcrypt</td>
+                    <td>Password storage (legacy)</td>
+                    <td>✅ Yes</td>
+                    <td>Limited to 72-byte passwords; prefer Argon2id for new systems</td>
                 </tr>
                 <tr>
                     <td>Argon2id</td>
                     <td>Password storage</td>
                     <td>✅ Yes</td>
-                    <td>Slow and memory-hard by design</td>
+                    <td>Memory-hard + CPU-hard; tunable; NIST recommended</td>
                 </tr>
             </tbody>
         </table>
@@ -142,15 +199,23 @@ users.password = {{ result.stored }}
 <section class="card">
     <h2>Teaching Point</h2>
 
+    <p class="hint">
+        "Hashing" is not a single thing. SHA-256 and Argon2id are both hash functions,
+        but they were designed for completely different purposes. The question to ask is:
+        <em>what threat model does this primitive protect against?</em>
+    </p>
+
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Wrong</span></p>
-            <div class="query">“It is hashed, so it is safe.”</div>
+            <div class="query">"It is hashed, so it is safe."</div>
+            <p class="hint">SHA-256 is fast by design — that property is a vulnerability when the hash is a password.</p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better</span></p>
-            <div class="query">“What is this primitive designed to protect against?”</div>
+            <div class="query">"Use Argon2id with tuned parameters.<br>Let the library handle salt generation."</div>
+            <p class="hint">Argon2id is slow and memory-intensive by design. Tuning ensures it remains expensive as hardware improves.</p>
         </div>
     </div>
 </section>

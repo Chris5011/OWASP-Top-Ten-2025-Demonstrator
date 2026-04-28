@@ -6,10 +6,41 @@
 <section class="card">
     <h2>LDAP Injection: Directory Login Example</h2>
     <p class="hint">
-        This demo pretends a web application checks credentials against a directory service.
-        The key idea is that LDAP filters also have syntax. If user input is inserted directly,
-        input can become part of the filter logic.
+        LDAP (Lightweight Directory Access Protocol) is the protocol used by enterprise directory
+        services such as Microsoft Active Directory and OpenLDAP. Applications often query a directory
+        to authenticate users or look up their roles and group memberships.
+        LDAP injection occurs when user input is inserted into an LDAP filter without escaping,
+        allowing an attacker to alter the filter's logic — just as SQL injection alters a SQL query.
     </p>
+</section>
+
+<section class="card">
+    <h2>How LDAP Filters Work</h2>
+    <p class="hint">
+        An LDAP filter uses a prefix-notation syntax. The filter below means
+        "find entries where <em>uid equals alice</em> AND <em>userPassword equals secret</em>":
+    </p>
+    <div class="query">(&amp;(uid=alice)(userPassword=secret))</div>
+
+    <div class="grid-2" style="margin-top: 12px;">
+        <div class="mode-box unsafe">
+            <p><strong>Wildcard attack — Username: <code>*</code></strong></p>
+            <div class="query">(&amp;(uid=*)(userPassword=anything))</div>
+            <p class="hint">
+                The asterisk is the LDAP wildcard. <code>uid=*</code> matches <em>every</em> entry
+                in the directory. The first matching user — often the admin — is returned.
+            </p>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>Filter escape — Username: <code>admin)(|(uid=*)</code></strong></p>
+            <div class="query">(&amp;(uid=admin)(|(uid=*))(userPassword=anything))</div>
+            <p class="hint">
+                The injected parentheses close the AND clause and open a new OR clause.
+                Because <code>uid=*</code> is always true, the entire filter evaluates to true
+                and returns all users.
+            </p>
+        </div>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -58,11 +89,11 @@ uid=bob,ou=people,dc=example,dc=org
 
         <h2 style="margin-top: 22px;">Examples to Try</h2>
         <div class="examples">
-            <div class="example">admin / password</div>
-            <div class="example">alice / wrongpassword</div>
-            <div class="example">* / anything</div>
-            <div class="example">admin)(|(uid=*) / anything</div>
-            <div class="example">*)(uid=*))(|(uid=* / anything</div>
+            <div class="example">admin / password &nbsp;<span class="hint">— normal login</span></div>
+            <div class="example">alice / wrongpassword &nbsp;<span class="hint">— should fail</span></div>
+            <div class="example">* / anything &nbsp;<span class="hint">— wildcard matches all UIDs</span></div>
+            <div class="example">admin)(|(uid=*) / anything &nbsp;<span class="hint">— injects OR clause</span></div>
+            <div class="example">*)(uid=*))(|(uid=* / anything &nbsp;<span class="hint">— complex filter escape</span></div>
         </div>
     </section>
 </div>
@@ -74,19 +105,28 @@ uid=bob,ou=people,dc=example,dc=org
     {% if mode == "unsafe" %}
         <p>
             <span class="pill pill-red">Unsafe Mode</span>
-            User input is inserted directly into the LDAP filter.
+            User input is inserted directly into the LDAP filter string.
         </p>
         <div class="mode-box unsafe">
             <div class="query">{{ ldap_filter }}</div>
         </div>
+        <p class="hint">
+            The LDAP server receives this filter and evaluates it structurally.
+            Injected parentheses, wildcards, and operators are treated as real filter syntax.
+        </p>
     {% else %}
         <p>
             <span class="pill pill-green">Safe Mode</span>
-            Special LDAP filter characters are escaped.
+            Special LDAP filter characters are percent-encoded per RFC 4515.
         </p>
         <div class="mode-box safe">
             <div class="query">{{ ldap_filter }}</div>
         </div>
+        <p class="hint">
+            After escaping, <code>*</code> becomes <code>\2a</code>, <code>(</code> becomes <code>\28</code>,
+            and <code>)</code> becomes <code>\29</code>.
+            The LDAP server treats these as literal characters to search for — not as filter operators.
+        </p>
     {% endif %}
 </section>
 {% endif %}
@@ -103,23 +143,47 @@ uid=bob,ou=people,dc=example,dc=org
 
     {% if mode == "unsafe" %}
         <p class="hint">
-            In unsafe mode, characters like <code>*</code>, <code>(</code>, <code>)</code>,
-            <code>|</code>, <code>&amp;</code>, and <code>!</code> can alter the LDAP filter.
+            In a real directory service, the injected filter may match all users, bypass
+            authentication entirely, or enumerate directory contents the attacker is not supposed to see.
         </p>
     {% else %}
         <p class="hint">
-            In safe mode, special characters are encoded, so they are searched as literal values
-            instead of being interpreted as LDAP filter syntax.
+            Because the input is escaped, the LDAP server searches for a user whose UID is literally the
+            string the attacker typed — which does not exist. Authentication fails correctly.
         </p>
     {% endif %}
 </section>
 {% endif %}
 
 <section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Bypass authentication without knowing any password</li>
+                <li>Enumerate all usernames in the directory</li>
+                <li>Retrieve sensitive attributes (email, phone, group memberships)</li>
+                <li>Potentially access the full Active Directory schema</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Escape all user input per RFC 4515 before inserting into a filter</li>
+                <li>Prefer high-level directory SDK methods that parameterize filters</li>
+                <li>Validate that usernames match an expected pattern (letters, digits, hyphen) before the LDAP call</li>
+                <li>Apply least privilege: the bind account should be read-only</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
-        LDAP injection follows the same general injection pattern:
-        user input crosses from <strong>directory attribute value</strong>
+        LDAP injection is the same root cause as SQL injection, applied to a different interpreter.
+        User input crosses from <strong>directory attribute value</strong>
         into <strong>LDAP filter logic</strong>.
     </p>
 
@@ -130,7 +194,7 @@ uid=bob,ou=people,dc=example,dc=org
         </div>
 
         <div class="mode-box safe">
-            <p><span class="pill pill-green">Safer</span></p>
+            <p><span class="pill pill-green">Safe</span></p>
             <div class="query">(&amp;(uid=escape(USER_INPUT))(userPassword=escape(USER_INPUT)))</div>
         </div>
     </div>

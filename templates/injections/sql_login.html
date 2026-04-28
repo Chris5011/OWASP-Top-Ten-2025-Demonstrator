@@ -6,9 +6,47 @@
 <section class="card">
     <h2>SQL Injection: Login Example</h2>
     <p class="hint">
-        This demo shows how user input can alter the meaning of a SQL query
-        when string concatenation is used.
+        SQL injection is one of the oldest and most impactful vulnerabilities in web security.
+        It occurs when an application builds a SQL query by concatenating strings that include
+        unvalidated user input. The database engine cannot distinguish between the developer's
+        intent and the attacker's inserted logic — it simply executes whatever query it receives.
     </p>
+</section>
+
+<section class="card">
+    <h2>How It Works</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>1. Developer writes a template</strong></p>
+            <div class="query">"SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'"</div>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>2. Attacker submits:</strong> <code>admin' OR '1'='1</code></p>
+            <div class="query">SELECT * FROM users WHERE username = 'admin' OR '1'='1' AND password = 'anything'</div>
+            <p class="hint">
+                The condition <code>'1'='1'</code> is always true, so the WHERE clause matches every row.
+                The database returns the first user — typically the admin account.
+            </p>
+        </div>
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+        <div class="mode-box unsafe">
+            <p><strong>Comment injection:</strong> <code>admin' --</code></p>
+            <div class="query">SELECT * FROM users WHERE username = 'admin' --' AND password = '...'</div>
+            <p class="hint">
+                The double-dash <code>--</code> starts a SQL comment, discarding everything after it.
+                The password check is silently removed from the query.
+            </p>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Safe: parameterized query</strong></p>
+            <div class="query">SELECT * FROM users WHERE username = ? AND password = ?<br><br>bind("admin' OR '1'='1", "anything")</div>
+            <p class="hint">
+                The query template is compiled first. The user input is then passed as a typed value,
+                never interpreted as SQL syntax.
+            </p>
+        </div>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -44,12 +82,13 @@
 
     <section class="card">
         <h2>2. Examples to Try</h2>
+        <p class="hint">Start in <strong>Unsafe</strong> mode, then switch to <strong>Safe</strong> and observe the difference.</p>
         <div class="examples">
-            <div class="example">admin / password</div>
-            <div class="example">admin / wrongpassword</div>
-            <div class="example">admin' OR '1'='1 / anything</div>
-            <div class="example">' OR '1'='1 / anything</div>
-            <div class="example">admin' -- / anything</div>
+            <div class="example">admin / password &nbsp;<span class="hint">— correct credentials</span></div>
+            <div class="example">admin / wrongpassword &nbsp;<span class="hint">— should fail</span></div>
+            <div class="example">admin' OR '1'='1 / anything &nbsp;<span class="hint">— always-true injection</span></div>
+            <div class="example">' OR '1'='1 / anything &nbsp;<span class="hint">— username bypass</span></div>
+            <div class="example">admin' -- / anything &nbsp;<span class="hint">— comment removes password check</span></div>
         </div>
     </section>
 </div>
@@ -59,15 +98,24 @@
     <h2>3. Generated Query</h2>
 
     {% if mode == "unsafe" %}
-        <p><span class="pill pill-red">Unsafe Mode</span> User input is inserted into the SQL string.</p>
+        <p><span class="pill pill-red">Unsafe Mode</span> User input is inserted directly into the SQL string.</p>
         <div class="mode-box unsafe">
             <div class="query">{{ query }}</div>
         </div>
+        <p class="hint">
+            Highlighted text shows where user input landed inside the query.
+            If the input contains SQL syntax (<code>'</code>, <code>OR</code>, <code>--</code>),
+            that syntax is now part of the query the database will execute.
+        </p>
     {% else %}
-        <p><span class="pill pill-green">Safe Mode</span> User input is bound separately.</p>
+        <p><span class="pill pill-green">Safe Mode</span> The query uses a placeholder (<code>?</code>); user input is bound separately.</p>
         <div class="mode-box safe">
             <div class="query">{{ query }}</div>
         </div>
+        <p class="hint">
+            The query structure is fixed at compile time. The database driver sends the
+            parameter value separately and treats it as pure data, regardless of what characters it contains.
+        </p>
     {% endif %}
 </section>
 {% endif %}
@@ -78,10 +126,53 @@
     <div class="result {{ result_class }}">{{ result }}</div>
 
     {% if mode == "unsafe" %}
-        <p class="hint">In unsafe mode, injected input can change the query logic.</p>
+        <p class="hint">In unsafe mode, an injection payload can bypass authentication, extract data, or even modify the database.</p>
     {% else %}
-        <p class="hint">In safe mode, the query structure stays fixed.</p>
+        <p class="hint">In safe mode, even a perfectly crafted injection payload is treated as a literal string and does not alter the query logic.</p>
     {% endif %}
 </section>
 {% endif %}
+
+<section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Bypass login without knowing any password</li>
+                <li>Dump all usernames, passwords, and email addresses</li>
+                <li>Read arbitrary database tables (<code>UNION SELECT</code>)</li>
+                <li>Modify or delete data</li>
+                <li>In some configurations: read files from the server or execute OS commands</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Always use parameterized queries or prepared statements</li>
+                <li>ORM frameworks (SQLAlchemy, Hibernate, ActiveRecord) do this by default when used correctly</li>
+                <li>Input validation is useful but is <em>not a substitute</em> — parameterize first</li>
+                <li>Apply least privilege: the DB user should not have DROP or FILE permissions</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Teaching Point</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Wrong mental model</span></p>
+            <div class="query">"I will filter out the bad characters."</div>
+            <p class="hint">Blocklist filtering is fragile — there are always edge cases, encoding tricks, or characters you missed.</p>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Correct mental model</span></p>
+            <div class="query">"Data and instructions must travel through separate channels."</div>
+            <p class="hint">Parameterized queries enforce this separation structurally — the driver makes injection impossible by construction.</p>
+        </div>
+    </div>
+</section>
 {% endblock %}

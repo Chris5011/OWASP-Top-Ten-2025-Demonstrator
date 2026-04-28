@@ -5,9 +5,48 @@
 <section class="card">
     <h2>A04: Cryptographic Failures — JWT Token Integrity</h2>
     <p class="hint">
-        This module shows why JWTs are only trustworthy when their signature and algorithm are verified correctly.
-        The token payload is readable by design — integrity comes from the signature.
+        JSON Web Tokens (JWTs) are a popular way to represent identity and claims between
+        a client and a server. A JWT consists of three Base64URL-encoded parts:
+        <strong>header</strong>, <strong>payload</strong>, and <strong>signature</strong>.
+        The payload is <em>not encrypted</em> — anyone can read it. Security comes entirely
+        from the server verifying the signature before trusting the claims.
     </p>
+</section>
+
+<section class="card">
+    <h2>JWT Structure</h2>
+    <div class="query wrap">header.payload.signature<br><br>eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9  ← header: {"typ":"JWT","alg":"HS256"}<br>.eyJzdWIiOiJhbGljZSIsInJvbGUiOiJ1c2VyIn0  ← payload: {"sub":"alice","role":"user"}<br>.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw  ← HMAC-SHA256 signature</div>
+    <p class="hint" style="margin-top: 8px;">
+        The signature is computed over <code>base64url(header) + "." + base64url(payload)</code>
+        using a secret key only the server knows. If an attacker changes the payload (e.g., sets
+        <code>role=admin</code>), the signature no longer matches — and the server should reject the token.
+    </p>
+</section>
+
+<section class="card">
+    <h2>Two Classic JWT Attacks</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Attack 1 — alg=none</span></p>
+            <p class="hint">
+                The JWT header includes an <code>alg</code> field that names the signature algorithm.
+                In 2015 a widespread vulnerability was discovered (CVE-2015-9235): if the library trusted
+                this field, an attacker could set <code>"alg":"none"</code>, remove the signature,
+                and submit a token the library accepted as valid — because "no signature" is treated
+                as a valid algorithm variant.
+            </p>
+            <div class="query">Header: {"alg":"none"}<br>Payload: {"role":"admin"}<br>Signature: (empty)<br><br>→ Many libraries accepted this</div>
+        </div>
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Attack 2 — Modified payload, old signature</span></p>
+            <p class="hint">
+                An attacker edits the payload (changing <code>role</code> to <code>admin</code>)
+                but keeps the original signature from before the edit.
+                A naive implementation that does not recompute the expected signature will fail to detect the mismatch.
+            </p>
+            <div class="query">Original: header.original_payload.valid_sig<br>Tampered: header.admin_payload.valid_sig<br><br>→ Signature no longer matches payload</div>
+        </div>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -47,10 +86,12 @@
         </p>
 
         <div class="mode-box">
-            <p><strong>Teaching Focus</strong></p>
+            <p><strong>Key principle</strong></p>
             <p class="hint">
-                A JWT is not encrypted. Anyone can edit the payload.
-                Security depends on rejecting modified tokens whose signature no longer matches.
+                A JWT is not a proof of identity — it is a <em>claim</em> about identity.
+                The claim only becomes trustworthy after the server independently verifies the signature
+                using a secret key the attacker does not have.
+                The server must never trust the token's own <code>alg</code> field.
             </p>
         </div>
     </section>
@@ -63,11 +104,13 @@
         <div class="mode-box">
             <p><strong>Header</strong></p>
             <div class="query wrap">{{ result.header }}</div>
+            <p class="hint">The header specifies the algorithm. In safe mode, the server ignores this value and uses its own expected algorithm.</p>
         </div>
 
         <div class="mode-box">
             <p><strong>Payload</strong></p>
             <div class="query wrap">{{ result.payload }}</div>
+            <p class="hint">The payload is readable by anyone — it is only Base64-encoded, not encrypted. Never put secrets here.</p>
         </div>
     </div>
 </section>
@@ -75,13 +118,13 @@
 <section class="card">
     <h2>4. Signature View</h2>
 
-    <div class="query wrap">
-signature = {{ result.signature }}
-    </div>
+    <div class="query wrap">signature = {{ result.signature }}</div>
 
     <p class="hint">
-        In the unsafe mode, the application accepts attacker-controlled token metadata.
-        In the safe mode, the server enforces the expected algorithm and recalculates the signature with its own secret.
+        In safe mode, the server recomputes the expected HMAC-SHA256 signature over the current
+        header and payload using its own secret key, then compares it against this value using
+        a constant-time comparison (to prevent timing attacks).
+        Any mismatch — including an empty signature from alg=none — causes rejection.
     </p>
 </section>
 
@@ -101,12 +144,20 @@ signature = {{ result.signature }}
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Wrong</span></p>
-            <div class="query">“The token says admin, so the user is admin.”</div>
+            <div class="query">"The token says admin, so the user is admin."</div>
+            <p class="hint">
+                The payload is attacker-controlled. Reading claims before verifying the signature
+                is the vulnerability.
+            </p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better</span></p>
-            <div class="query">“The token is only valid if the server can verify its integrity.”</div>
+            <div class="query">1. Enforce expected algorithm server-side<br>2. Verify signature with your secret key<br>3. Only then read and trust the claims</div>
+            <p class="hint">
+                Use a well-maintained JWT library. Never implement signature verification manually.
+                Pin the expected algorithm in code — never derive it from the token.
+            </p>
         </div>
     </div>
 </section>

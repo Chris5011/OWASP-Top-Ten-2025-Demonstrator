@@ -6,9 +6,36 @@
 <section class="card">
     <h2>A06: Insecure Design — Negative Quantity Shop</h2>
     <p class="hint">
-        This demo shows a business logic flaw: the application correctly calculates
-        the total, but the design failed to define a basic rule.
+        Insecure Design describes vulnerabilities that exist because the application was
+        designed without security requirements — not because a developer made a coding mistake.
+        The code is often technically correct; it faithfully implements a design that was
+        never thought through from a security perspective.
+        No amount of code review or pen-testing can "patch" a fundamentally flawed design —
+        it must be rethought.
     </p>
+</section>
+
+<section class="card">
+    <h2>Insecure Design vs. Coding Bug</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Coding Bug</span></p>
+            <p class="hint">
+                The developer intended to validate input but made an error in implementation.
+                A code fix resolves the problem.
+            </p>
+            <div class="query">if quantity > 0:  # developer forgot ">="<br>    accept_order()</div>
+        </div>
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Insecure Design</span></p>
+            <p class="hint">
+                The requirement "quantity must be positive" was never written down, never tested,
+                and never enforced anywhere. The code does exactly what was designed —
+                the design itself is missing a constraint.
+            </p>
+            <div class="query"># No validation, because nobody asked for it<br>total = price * quantity<br>accept_order(total)</div>
+        </div>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -52,14 +79,28 @@
         <h2>2. Try This</h2>
 
         <div class="examples">
-            <div class="example">Coffee Mug × 1</div>
-            <div class="example">Coffee Mug × -1</div>
-            <div class="example">Cyber Hoodie × -10</div>
+            <div class="example">Coffee Mug × 1 &nbsp;<span class="hint">— normal order</span></div>
+            <div class="example">Coffee Mug × -1 &nbsp;<span class="hint">— negative quantity</span></div>
+            <div class="example">Cyber Hoodie × -10 &nbsp;<span class="hint">— large "refund"</span></div>
         </div>
 
-        <p class="hint" style="margin-top: 16px;">
-            Question: <strong>Is this a coding bug, or did we design something stupid?</strong>
-        </p>
+        <div class="mode-box" style="margin-top: 16px;">
+            <p><strong>Question to consider:</strong></p>
+            <p class="hint">
+                Is this a coding bug, or did someone simply forget to define the business rule?
+                What would a threat model for a shop checkout reveal?
+            </p>
+        </div>
+
+        <div class="mode-box" style="margin-top: 8px;">
+            <p><strong>Threat modeling insight:</strong></p>
+            <p class="hint">
+                A simple STRIDE analysis of the checkout flow would immediately surface
+                "user enters invalid quantity" as a threat under <em>Tampering</em>.
+                The mitigation — enforce positive quantity — becomes a design requirement
+                before a line of code is written.
+            </p>
+        </div>
     </section>
 </div>
 
@@ -102,11 +143,48 @@ total = €{{ "%.2f"|format(total) }}
         <div class="mode-box unsafe" style="margin-top: 16px;">
             <p><strong>Business impact:</strong></p>
             <p class="hint">
-                The customer does not pay the shop. The shop effectively gives the customer
-                €{{ "%.2f"|format(total * -1) }} in credit.
+                The customer does not pay the shop — the shop owes the customer
+                €{{ "%.2f"|format(total * -1) }} in credit. At scale, this kind of flaw
+                can be exploited systematically to drain a store's inventory or credit pool.
             </p>
         </div>
     {% endif %}
+</section>
+
+<section class="card">
+    <h2>More Business Logic Flaw Examples</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>Coupon stacking</strong></p>
+            <p class="hint">
+                A discount code that can be applied multiple times per order.
+                Design never specified "one coupon per order."
+            </p>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>Race condition on limited stock</strong></p>
+            <p class="hint">
+                Two users check "1 item in stock" simultaneously, both add it to cart,
+                both complete payment. Design never modeled concurrent access.
+            </p>
+        </div>
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+        <div class="mode-box unsafe">
+            <p><strong>Price tampering via API</strong></p>
+            <p class="hint">
+                A mobile app sends the price of an item in the checkout POST request.
+                Design trusted the client to send the correct price.
+            </p>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>Password reset link reuse</strong></p>
+            <p class="hint">
+                A reset link works indefinitely, or does not invalidate after first use.
+                Design never specified reset token expiry.
+            </p>
+        </div>
+    </div>
 </section>
 
 <section class="card">
@@ -114,26 +192,22 @@ total = €{{ "%.2f"|format(total) }}
 
     <p class="hint">
         Insecure Design is not just a missing <code>if</code> statement.
-        The deeper problem is that the required business rule was not designed,
-        specified, tested, or enforced.
+        The deeper problem is that the required business rule was never <em>designed</em>,
+        <em>specified</em>, <em>tested</em>, or <em>enforced at the architecture level</em>.
+        The fix starts before the first line of code — in requirements and threat modeling.
     </p>
 
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Bad Design</span></p>
-            <div class="query">
-total = price * quantity<br>
-accept_order(total)
-            </div>
+            <div class="query">total = price * quantity<br>accept_order(total)</div>
+            <p class="hint">Math is correct. Business rule is missing.</p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better Design</span></p>
-            <div class="query">
-require quantity >= 1<br>
-require total >= 0<br>
-then accept_order(total)
-            </div>
+            <div class="query">require quantity >= 1<br>require total >= 0<br>then accept_order(total)</div>
+            <p class="hint">Business constraints are explicit requirements — tested, reviewed, and enforced in code.</p>
         </div>
     </div>
 </section>

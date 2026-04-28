@@ -5,22 +5,103 @@
 <section class="card">
     <h2>A08: Software or Data Integrity Failures — CDN Tampering and SRI</h2>
     <p class="hint">
-        Third-party JavaScript runs with the same privileges as your own frontend code.
-        If it changes and you do not verify integrity, your users execute the attacker’s code.
+        When a web page loads JavaScript from a third-party CDN, that script runs in the
+        user's browser with the same permissions as your own code — it can read the DOM,
+        steal cookies, make authenticated API calls, and exfiltrate data.
+        If the CDN is compromised, or if the URL resolves to different content than expected,
+        every visitor to your site executes the attacker's code — silently.
     </p>
+</section>
+
+<section class="card">
+    <h2>Subresource Integrity (SRI)</h2>
+    <p class="hint">
+        <strong>Subresource Integrity</strong> is a browser security feature that lets you
+        bind a specific expected hash to an external script or stylesheet.
+        The browser computes the hash of the downloaded file and compares it to the value
+        in your HTML. If they do not match, the browser refuses to execute the script.
+    </p>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>Without SRI</strong></p>
+            <div class="query">&lt;script src="https://cdn.example.com/lib.js"&gt;&lt;/script&gt;</div>
+            <p class="hint">
+                The browser downloads whatever is at that URL and runs it.
+                If the CDN is compromised tomorrow, your users run malicious code tomorrow.
+            </p>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>With SRI</strong></p>
+            <div class="query">&lt;script<br>  src="https://cdn.example.com/lib.js"<br>  integrity="sha384-abc123..."<br>  crossorigin="anonymous"&gt;&lt;/script&gt;</div>
+            <p class="hint">
+                The browser computes the SHA-384 hash of the downloaded file and
+                checks it against <code>abc123...</code>. A modified script produces a different hash —
+                the browser blocks it before it executes.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>How to Generate an SRI Hash</h2>
+    <div class="query">
+# Using openssl:<br>
+curl -s https://cdn.example.com/lib.js | openssl dgst -sha384 -binary | openssl base64 -A<br><br>
+# Using the SRI Hash Generator website:<br>
+https://www.srihash.org/<br><br>
+# Result goes in the integrity attribute:<br>
+integrity="sha384-&lt;your_hash_here&gt;"
+    </div>
+    <p class="hint" style="margin-top: 8px;">
+        The hash must be recomputed every time the file legitimately changes (e.g., a library version upgrade).
+        This is intentional — it forces a conscious review before trusting new third-party code.
+    </p>
+</section>
+
+<section class="card">
+    <h2>Supply Chain Attack Context</h2>
+    <p class="hint">
+        CDN compromise is one vector in a broader class of <strong>software supply chain attacks</strong>:
+    </p>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>CDN compromise</strong></p>
+            <p class="hint">
+                Attacker gains write access to a CDN bucket or DNS and replaces a legitimate file
+                with a malicious version. All sites linking to it are instantly affected.
+                Notable: <em>Polyfill.io</em> (2024) — the domain was acquired and began serving
+                malware to millions of sites.
+            </p>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>npm package hijack</strong></p>
+            <p class="hint">
+                Attacker publishes a malicious version of a popular npm package, or takes over
+                a maintainer account. Any project that runs <code>npm install</code> pulls down
+                the malicious code. Notable: <em>event-stream</em> (2018) — malicious code
+                targeting cryptocurrency wallets was embedded in a widely-used package.
+            </p>
+        </div>
+    </div>
 </section>
 
 <section class="card">
     <h2>1. CDN Script Loader</h2>
 
     <div class="grid-2">
-        <button onclick="loadCdn(false, false)">Load Trusted CDN Script</button>
-        <button onclick="loadCdn(true, false)">Load Compromised CDN Script</button>
+        <button onclick="loadCdn(false, false)">✅ Load Trusted CDN Script</button>
+        <button onclick="loadCdn(true, false)">❌ Load Compromised CDN Script</button>
     </div>
 
-    <button style="margin-top: 16px;" onclick="loadCdn(true, true)">
-        Load Compromised Script with SRI
+    <button style="margin-top: 16px; width: 100%;" onclick="loadCdn(true, true)">
+        🛡️ Load Compromised Script with SRI Check
     </button>
+
+    <p class="hint" style="margin-top: 12px;">
+        The "compromised" script is a different file served by this demo server.
+        In a real attack it would arrive from the same URL as the legitimate script —
+        the only difference the browser can detect is the hash mismatch.
+    </p>
 </section>
 
 <div class="grid-2">
@@ -34,8 +115,9 @@
         </form>
 
         <p class="hint">
-            The form is intentionally simple. The point is that third-party JavaScript
-            can observe or change frontend behavior.
+            This form simulates what third-party JavaScript can observe.
+            A compromised script can attach event listeners to form fields,
+            intercept submitted values, and silently send them to an attacker's server.
         </p>
     </section>
 
@@ -44,6 +126,12 @@
         <div id="cdn-output" class="mode-box">
             Click a button above to load a script.
         </div>
+
+        <p class="hint" style="margin-top: 12px;">
+            Observe the difference between trusted and compromised output.
+            When SRI is enabled, the compromised script is blocked before it runs —
+            the output box shows a browser rejection message rather than the script's output.
+        </p>
     </section>
 </div>
 
@@ -53,12 +141,20 @@
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Wrong</span></p>
-            <div class="query">“It comes from a CDN, so it is probably fine.”</div>
+            <div class="query">"It comes from a CDN, so it is probably fine."</div>
+            <p class="hint">
+                CDNs are targets. Libraries are abandoned and taken over.
+                Trusting a URL is trusting every future version of whatever is served at that URL.
+            </p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better</span></p>
-            <div class="query">“The browser should verify the script hash before executing it.”</div>
+            <div class="query">"Pin exact versions. Add integrity hashes.<br>Review changes before bumping versions."</div>
+            <p class="hint">
+                SRI gives the browser the ability to enforce integrity.
+                Self-hosting critical scripts removes the CDN as a trust dependency entirely.
+            </p>
         </div>
     </div>
 </section>
@@ -77,8 +173,11 @@ function loadCdn(compromised, sriEnabled) {
 
     if (compromised && sriEnabled) {
         output.innerHTML = `
-            <div class="success-box">
-                SRI check failed. Browser refuses to execute the modified script.
+            <div class="mode-box safe">
+                <strong>SRI check failed.</strong><br>
+                The browser computed a hash of the downloaded script and found it did not match
+                the expected integrity value. The script was blocked before execution.
+                This is the browser's built-in supply chain protection working correctly.
             </div>
         `;
         return;

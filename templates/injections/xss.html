@@ -4,11 +4,45 @@
 
 {% block content %}
 <section class="card">
-    <h2>Cross-Site Scripting: Comment Example</h2>
+    <h2>Cross-Site Scripting (XSS): Comment Example</h2>
     <p class="hint">
-        This demo pretends a web application displays user comments on a page.
-        The goal is to show when user input becomes browser-interpreted HTML instead of plain text.
+        Cross-Site Scripting (XSS) occurs when an application includes user-supplied content in a
+        web page without properly encoding it. The browser receives what looks like HTML or JavaScript
+        from the trusted server and executes it — not knowing the code came from an attacker.
+        XSS is consistently one of the most widespread web vulnerabilities.
     </p>
+</section>
+
+<section class="card">
+    <h2>Three Types of XSS</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Reflected XSS</span></p>
+            <p class="hint">
+                The malicious script is embedded in a URL parameter. The server reflects it back in
+                the response without sanitization. The attacker tricks a victim into clicking a crafted link.
+            </p>
+            <div class="query">https://example.com/search?q=&lt;script&gt;steal()&lt;/script&gt;</div>
+        </div>
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Stored XSS</span></p>
+            <p class="hint">
+                The script is saved to the database (e.g., in a comment or profile field) and later
+                rendered to every visitor who views that content. This is the most dangerous type —
+                <strong>this demo simulates stored XSS</strong>.
+            </p>
+            <div class="query">Comment stored: &lt;script&gt;steal()&lt;/script&gt;<br>Rendered to all visitors</div>
+        </div>
+    </div>
+    <div class="mode-box unsafe" style="margin-top: 8px;">
+        <p><span class="pill pill-red">DOM-Based XSS</span></p>
+        <p class="hint">
+            The vulnerability lives entirely in JavaScript. The page reads a value from a source
+            (e.g., <code>location.hash</code>, <code>document.cookie</code>) and writes it into the DOM
+            via a sink (e.g., <code>innerHTML</code>) without encoding. The server is never involved.
+        </p>
+        <div class="query">document.getElementById("msg").innerHTML = location.hash.slice(1);</div>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -39,12 +73,13 @@
 
     <section class="card">
         <h2>2. Examples to Try</h2>
+        <p class="hint">Try these in <strong>Unsafe</strong> mode first, then switch to <strong>Safe</strong>.</p>
         <div class="examples">
-            <div class="example">Hello class!</div>
-            <div class="example">&lt;b&gt;I am bold&lt;/b&gt;</div>
-            <div class="example">&lt;h1&gt;Big comment&lt;/h1&gt;</div>
-            <div class="example">&lt;script&gt;alert("XSS")&lt;/script&gt;</div>
-            <div class="example">&lt;img src=x onerror=alert("XSS")&gt;</div>
+            <div class="example">Hello class! &nbsp;<span class="hint">— plain text</span></div>
+            <div class="example">&lt;b&gt;I am bold&lt;/b&gt; &nbsp;<span class="hint">— HTML formatting</span></div>
+            <div class="example">&lt;h1&gt;Big comment&lt;/h1&gt; &nbsp;<span class="hint">— page structure change</span></div>
+            <div class="example">&lt;script&gt;alert("XSS")&lt;/script&gt; &nbsp;<span class="hint">— script execution</span></div>
+            <div class="example">&lt;img src=x onerror=alert("XSS")&gt; &nbsp;<span class="hint">— event handler payload</span></div>
         </div>
     </section>
 </div>
@@ -56,7 +91,7 @@
     {% if mode == "unsafe" %}
         <p>
             <span class="pill pill-red">Unsafe Mode</span>
-            User input is inserted as raw HTML.
+            User input is inserted as raw HTML. The browser will parse any tags or event handlers.
         </p>
         <div class="mode-box unsafe">
             <div class="query">{{ html_output }}</div>
@@ -64,7 +99,8 @@
     {% else %}
         <p>
             <span class="pill pill-green">Safe Mode</span>
-            User input is escaped before rendering.
+            Special characters are HTML-escaped before rendering.
+            <code>&lt;</code> becomes <code>&amp;lt;</code>, <code>&gt;</code> becomes <code>&amp;gt;</code>.
         </p>
         <div class="mode-box safe">
             <div class="query">{{ html_output }}</div>
@@ -79,8 +115,8 @@
 
     {% if mode == "unsafe" %}
         <p class="hint">
-            In unsafe mode, the browser may interpret input as HTML.  
-            For safety, this preview is sandboxed and scripts are not executed.
+            The iframe below shows how the browser renders the page with the raw input.
+            Scripts are sandboxed here for safety, but in a real application they would execute freely.
         </p>
 
         <iframe
@@ -90,7 +126,8 @@
         </iframe>
     {% else %}
         <p class="hint">
-            In safe mode, input is displayed as text, even if it contains HTML-looking characters.
+            In safe mode, the browser displays the raw characters as visible text —
+            <code>&lt;script&gt;</code> appears on screen rather than being executed.
         </p>
 
         <div class="safe-preview">
@@ -107,34 +144,60 @@
 
     {% if mode == "unsafe" %}
         <p class="hint">
-            In unsafe mode, tags like <code>&lt;b&gt;</code>, <code>&lt;script&gt;</code>,
-            or event handlers like <code>onerror</code> can become browser instructions.
+            In a real stored-XSS scenario, every subsequent visitor to this page would trigger
+            the script — not just the attacker. Cookie theft or session hijacking would happen silently in the background.
         </p>
     {% else %}
         <p class="hint">
-            In safe mode, special characters like <code>&lt;</code> and <code>&gt;</code>
-            are encoded so the browser treats them as text.
+            HTML escaping means the browser never interprets the input as markup.
+            It reads <code>&amp;lt;script&amp;gt;</code> and displays <code>&lt;script&gt;</code> as text.
         </p>
     {% endif %}
 </section>
 {% endif %}
 
 <section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Steal session cookies and hijack authenticated sessions</li>
+                <li>Log keystrokes and capture passwords as the victim types</li>
+                <li>Redirect the victim to a phishing page</li>
+                <li>Make requests to the application on behalf of the victim (CSRF-like)</li>
+                <li>Exfiltrate sensitive data visible on the current page</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Use contextual output encoding — HTML, JS, CSS, and URL contexts need different escaping</li>
+                <li>Use templating engines that auto-escape by default (Jinja2, Twig, Razor)</li>
+                <li>Add a <strong>Content Security Policy</strong> header to limit script sources</li>
+                <li>Set cookies <code>HttpOnly</code> to prevent JavaScript from reading them</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
         XSS follows the same injection pattern: untrusted input crosses the boundary from
         <strong>text/data</strong> into <strong>browser instructions</strong>.
+        The interpreter here is the browser's HTML/JS engine rather than a SQL engine or shell.
     </p>
 
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Unsafe</span></p>
-            <div class="query">&lt;div&gt;USER_INPUT&lt;/div&gt;</div>
+            <div class="query">&lt;div&gt;USER_INPUT&lt;/div&gt;<br><br>Browser sees: &lt;script&gt;steal()&lt;/script&gt;</div>
         </div>
 
         <div class="mode-box safe">
-            <p><span class="pill pill-green">Safer</span></p>
-            <div class="query">&lt;div&gt;escape(USER_INPUT)&lt;/div&gt;</div>
+            <p><span class="pill pill-green">Safe</span></p>
+            <div class="query">&lt;div&gt;escape(USER_INPUT)&lt;/div&gt;<br><br>Browser sees: &amp;lt;script&amp;gt;steal()&amp;lt;/script&amp;gt;</div>
         </div>
     </div>
 </section>

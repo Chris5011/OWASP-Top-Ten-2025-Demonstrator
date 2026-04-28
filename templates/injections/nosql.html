@@ -5,8 +5,56 @@
 <section class="card">
     <h2>NoSQL Injection: MongoDB-style Login Example</h2>
     <p class="hint">
-        This demo shows how input can become part of a MongoDB-style query object.
+        NoSQL databases like MongoDB do not use SQL, but they still have a query language with
+        operators and logic. In MongoDB, queries are sent as JSON objects. If an application
+        constructs a query by embedding user-provided strings without strict typing, an attacker
+        can inject JSON operators that change the query's meaning — the NoSQL equivalent of SQL injection.
     </p>
+</section>
+
+<section class="card">
+    <h2>How MongoDB Query Injection Works</h2>
+    <p class="hint">
+        A normal login query checks that both fields match exactly:
+    </p>
+    <div class="query">db.users.findOne({ "username": "alice", "password": "secret" })</div>
+
+    <div class="grid-2" style="margin-top: 12px;">
+        <div class="mode-box unsafe">
+            <p><strong>Password field injection: <code>{ "$ne": null }</code></strong></p>
+            <div class="query">db.users.findOne({<br>
+  "username": "admin",<br>
+  "password": { "$ne": null }<br>
+})</div>
+            <p class="hint">
+                <code>$ne</code> means "not equal". <code>{ "$ne": null }</code> matches any document
+                where the password field is not null — which is every real user account. No password needed.
+            </p>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>Username injection: <code>{ "$where": "true" }</code></strong></p>
+            <div class="query">db.users.findOne({<br>
+  "username": { "$where": "true" },<br>
+  "password": "anything"<br>
+})</div>
+            <p class="hint">
+                <code>$where</code> evaluates a JavaScript expression server-side.
+                <code>true</code> matches every document. In older MongoDB versions
+                this could also be used for arbitrary JavaScript execution.
+            </p>
+        </div>
+    </div>
+
+    <div class="mode-box safe" style="margin-top: 8px;">
+        <p><strong>Safe: strict string typing</strong></p>
+        <div class="query">username = str(request.form["username"])  # guaranteed to be a string<br>
+db.users.findOne({ "username": username, "password": password })</div>
+        <p class="hint">
+            When the application enforces that both fields are plain strings, the driver sends
+            them as JSON strings — never as objects containing <code>$ne</code>, <code>$gt</code>,
+            or <code>$where</code>. The operator injection becomes impossible.
+        </p>
+    </div>
 </section>
 
 <div class="grid-2">
@@ -38,12 +86,13 @@
 
     <section class="card">
         <h2>2. Examples to Try</h2>
+        <p class="hint">Try these in <strong>Unsafe</strong> mode to see operator injection in action.</p>
         <div class="examples">
-            <div class="example">admin / password</div>
-            <div class="example">admin / wrongpassword</div>
-            <div class="example">admin / { "$ne": null }</div>
-            <div class="example">{ "$ne": null } / anything</div>
-            <div class="example">{ "$where": "true" } / anything</div>
+            <div class="example">admin / password &nbsp;<span class="hint">— normal credentials</span></div>
+            <div class="example">admin / wrongpassword &nbsp;<span class="hint">— should fail</span></div>
+            <div class="example">admin / { "$ne": null } &nbsp;<span class="hint">— "not equal to null" bypass</span></div>
+            <div class="example">{ "$ne": null } / anything &nbsp;<span class="hint">— username operator bypass</span></div>
+            <div class="example">{ "$where": "true" } / anything &nbsp;<span class="hint">— JS expression bypass</span></div>
         </div>
     </section>
 </div>
@@ -51,9 +100,20 @@
 {% if nosql_output %}
 <section class="card">
     <h2>3. Generated MongoDB-style Query</h2>
+
+    {% if mode == "unsafe" %}
+        <p><span class="pill pill-red">Unsafe Mode</span> User input is embedded in the query object without type checking.</p>
+    {% else %}
+        <p><span class="pill pill-green">Safe Mode</span> Both fields are cast to strings — query operators cannot be injected.</p>
+    {% endif %}
+
     <div class="mode-box {% if mode == 'unsafe' %}unsafe{% else %}safe{% endif %}">
         <div class="query">{{ nosql_output }}</div>
     </div>
+    <p class="hint">
+        Compare the highlighted values: in unsafe mode, JSON objects with operators (<code>$ne</code>, <code>$where</code>)
+        appear as query logic; in safe mode, the values are always quoted strings.
+    </p>
 </section>
 {% endif %}
 
@@ -62,14 +122,81 @@
     <h2>4. Simulated Result</h2>
     <div class="result {{ result_class }}">{{ result }}</div>
     <div class="query">{{ simulated_output }}</div>
+
+    {% if mode == "unsafe" %}
+        <p class="hint">
+            Notice that operator injection requires no knowledge of the correct password.
+            The attacker only needs to craft a query condition that is always true.
+        </p>
+    {% else %}
+        <p class="hint">
+            Strict string parameters mean the query always checks for a literal match.
+            JSON operators in the user input are treated as part of the string value, not as query logic.
+        </p>
+    {% endif %}
 </section>
 {% endif %}
 
 <section class="card">
+    <h2>Common Vulnerable Query Operators</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Operator</th><th>Meaning</th><th>Injection Effect</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>$ne</code></td><td>Not equal</td><td><code>{ "$ne": null }</code> matches any non-null value — bypasses exact match</td></tr>
+                <tr><td><code>$gt</code></td><td>Greater than</td><td><code>{ "$gt": "" }</code> matches any non-empty string password</td></tr>
+                <tr><td><code>$regex</code></td><td>Regular expression match</td><td>Can be used to brute-force a value character by character</td></tr>
+                <tr><td><code>$where</code></td><td>JavaScript expression</td><td>Arbitrary server-side JS execution in older MongoDB versions</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Bypass authentication entirely without knowing any password</li>
+                <li>Enumerate documents by using comparison operators (<code>$gt</code>, <code>$regex</code>)</li>
+                <li>Execute arbitrary server-side JavaScript in vulnerable MongoDB configurations</li>
+                <li>Extract sensitive data from other collections if the query scope is not limited</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Enforce strict types: cast input to string before using in a query</li>
+                <li>Use an ODM (e.g., Mongoose with schema validation) that rejects unexpected operator objects</li>
+                <li>Disable server-side JavaScript evaluation (<code>security.javascriptEnabled: false</code>)</li>
+                <li>Validate input shape before it reaches the database layer</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
-        NoSQL injection happens when input becomes a query operator or query expression
-        instead of a literal value.
+        NoSQL injection is not SQL injection — but it is the same underlying problem.
+        The query language changed; the risk did not. Whenever user input can influence
+        the <em>structure</em> of a query — whether SQL, LDAP, JSON, or XML —
+        injection is possible if that boundary is not enforced.
     </p>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Unsafe</span></p>
+            <div class="query">{ "password": user_input }<br><br>If user_input = { "$ne": null },<br>query becomes an operator</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Safe</span></p>
+            <div class="query">{ "password": str(user_input) }<br><br>str() forces a JSON string —<br>operators cannot be injected</div>
+        </div>
+    </div>
 </section>
 {% endblock %}

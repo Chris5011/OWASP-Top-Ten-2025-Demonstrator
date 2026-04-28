@@ -1,13 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Injection Visualizer — Overview{% endblock %}
+{% block title %}OWASP Top 10:2025 Demonstrator{% endblock %}
 
 {% block content %}
 <section class="card">
-    <h2>What is Injection?</h2>
+    <h2>Welcome to the OWASP Top 10:2025 Demonstrator</h2>
     <p class="hint">
-        Injection happens when untrusted input is interpreted as part of a command,
-        query, or script instead of being handled purely as data.
+        This tool lets you interact with real security vulnerabilities in a safe, sandboxed environment.
+        Every demo is simulated — no real databases, shells, or credentials are involved.
+        The goal is to make the <em>mechanics</em> of each vulnerability visible and understandable.
+    </p>
+</section>
+
+<section class="card">
+    <h2>The Core Idea Behind Injection</h2>
+    <p class="hint">
+        Most injection vulnerabilities share one root cause: the application mixes
+        <strong>user-controlled data</strong> with <strong>interpreter instructions</strong>
+        using the same channel. The interpreter — SQL engine, shell, browser, LDAP directory — cannot
+        tell which part was written by the developer and which part was supplied by the attacker.
     </p>
 
     <div class="flow horizontal">
@@ -17,30 +28,97 @@
         <div>→</div>
         <div>🗄️ Interpreter</div>
     </div>
+
+    <div class="grid-2" style="margin-top: 16px;">
+        <div class="card">
+            <h2>Unsafe Pattern</h2>
+            <p>Commands are built by concatenating strings.</p>
+            <div class="query">query = "SELECT ... WHERE user = '" + input + "'"</div>
+            <p><span class="pill pill-red">Problem</span> Input can become logic.</p>
+        </div>
+
+        <div class="card">
+            <h2>Safe Pattern</h2>
+            <p>Commands and data travel through separate channels.</p>
+            <div class="query">query = "SELECT ... WHERE user = ?"<br>bind(input)</div>
+            <p><span class="pill pill-green">Fix</span> Input remains data, never instructions.</p>
+        </div>
+    </div>
 </section>
 
-<section class="grid-2">
-    <div class="card">
-        <h2>Unsafe Pattern</h2>
-        <p>
-            The application builds commands by concatenating strings.
-        </p>
-        <div class="query">
-            query = "SELECT ... WHERE user = '" + input + "'"
-        </div>
-        <p><span class="pill pill-red">Problem</span> Input can become logic.</p>
-    </div>
+<section class="card">
+    <h2>What Is OWASP?</h2>
+    <p class="hint">
+        The <strong>Open Worldwide Application Security Project (OWASP)</strong> is a non-profit
+        community that produces freely available security guidance. The OWASP Top 10 is a periodically
+        updated list of the most critical web application security risks, based on data from thousands
+        of real applications. It is widely used as a baseline for security training, code reviews,
+        and security certifications.
+    </p>
+    <p class="hint">
+        This demonstrator covers the <strong>OWASP Top 10:2025</strong> edition. Each category
+        in the navigation on the left links to one or more interactive demos.
+    </p>
+</section>
 
-    <div class="card">
-        <h2>Safe Pattern</h2>
-        <p>
-            The application keeps commands and data separate.
-        </p>
-        <div class="query">
-            query = "SELECT ... WHERE user = ?"<br>
-            bind(input)
+<section class="card">
+    <h2>How to Use This Tool</h2>
+    <div class="grid-2">
+        <div class="mode-box safe">
+            <p><strong>Step 1 — Try the unsafe mode first</strong></p>
+            <p class="hint">
+                Switch to "Unsafe" mode in a demo and enter the example payloads provided.
+                Observe how the application processes the input and what the interpreter sees.
+            </p>
         </div>
-        <p><span class="pill pill-green">Fix</span> Input remains data.</p>
+        <div class="mode-box safe">
+            <p><strong>Step 2 — Switch to safe mode</strong></p>
+            <p class="hint">
+                Use the same payload in "Safe" mode. Compare what the query, command, or filter
+                looks like and why the attack no longer succeeds.
+            </p>
+        </div>
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+        <div class="mode-box safe">
+            <p><strong>Step 3 — Read the teaching points</strong></p>
+            <p class="hint">
+                Each demo ends with a teaching point that explains the root cause and
+                the correct mental model for thinking about the vulnerability.
+            </p>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Step 4 — Check Prevention & Detection</strong></p>
+            <p class="hint">
+                The Prevention &amp; Detection page ties all injection types together with
+                a unified fix strategy, tool recommendations, and a quick-reference table.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Coverage Overview</h2>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Core Risk</th>
+                    <th>Demos Available</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>A04 Cryptographic Failures</td><td>Weak or misapplied cryptography exposes sensitive data</td><td>Password Hashing, JWT Integrity</td></tr>
+                <tr><td>A05 Injection</td><td>Untrusted input becomes interpreter instructions</td><td>SQL, Command, XSS, LDAP, XML, NoSQL, HTTP Smuggling</td></tr>
+                <tr><td>A06 Insecure Design</td><td>Business logic flaws built into the architecture</td><td>Negative Quantity Shop</td></tr>
+                <tr><td>A07 Authentication Failures</td><td>Authentication and session management weaknesses</td><td>Session Hijacking/Fixation, JWT Auth Bypass</td></tr>
+                <tr><td>A08 Software &amp; Data Integrity</td><td>Untrusted code or data runs with application privileges</td><td>Insecure Deserialization, CDN Integrity / SRI</td></tr>
+                <tr><td>A09 Security Logging Failures</td><td>Missing logs make attacks invisible</td><td>Login Attack Timeline</td></tr>
+                <tr><td>A10 Exceptional Conditions</td><td>Error paths grant unintended access or reveal internals</td><td>Fail-open Authorization, Error Disclosure</td></tr>
+            </tbody>
+        </table>
     </div>
 </section>
 {% endblock %}

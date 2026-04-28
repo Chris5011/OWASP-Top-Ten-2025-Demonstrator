@@ -5,8 +5,59 @@
 <section class="card">
     <h2>HTTP Request Smuggling: Parser Disagreement Example</h2>
     <p class="hint">
-        This demo shows the concept visually: a front-end proxy and a back-end server may disagree
-        about where one request ends and the next begins.
+        HTTP request smuggling exploits a discrepancy between how a <strong>front-end proxy</strong>
+        and a <strong>back-end server</strong> determine where one HTTP request ends and the next begins.
+        By crafting a request that the two components parse differently, an attacker can "smuggle"
+        a hidden second request into the pipeline — bypassing access controls, poisoning caches,
+        or hijacking other users' requests.
+    </p>
+</section>
+
+<section class="card">
+    <h2>The Two Framing Headers</h2>
+    <p class="hint">
+        HTTP/1.1 offers two ways to specify where a request body ends:
+    </p>
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>Content-Length (CL)</strong></p>
+            <p class="hint">
+                Declares the exact number of bytes in the request body.
+                The receiver reads exactly that many bytes and treats the rest as the start of the next request.
+            </p>
+            <div class="query">Content-Length: 13<br><br>[13 bytes of body]</div>
+        </div>
+        <div class="mode-box">
+            <p><strong>Transfer-Encoding: chunked (TE)</strong></p>
+            <p class="hint">
+                The body is sent in chunks, each preceded by its length in hexadecimal.
+                A chunk of size <code>0</code> signals the end of the body.
+            </p>
+            <div class="query">Transfer-Encoding: chunked<br><br>5\r\n<br>Hello\r\n<br>0\r\n<br>\r\n</div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>CL.TE: The Classic Smuggling Pattern</h2>
+    <p class="hint">
+        When both headers are present in the same request, RFC 7230 says <strong>Transfer-Encoding takes priority</strong>
+        and Content-Length should be ignored. But many real-world stacks do not implement this uniformly.
+    </p>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>Front-end proxy uses Content-Length</strong></p>
+            <p class="hint">The proxy reads <code>Content-Length: 13</code> bytes, thinks the request is complete, and forwards it to the back-end.</p>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>Back-end server uses Transfer-Encoding</strong></p>
+            <p class="hint">The server reads chunked encoding. After the <code>0\r\n\r\n</code> terminator it finds extra bytes — which it treats as the start of a new request.</p>
+        </div>
+    </div>
+    <p class="hint" style="margin-top: 12px;">
+        Those leftover bytes are the attacker's "smuggled" request. Because they appear to come from
+        the front-end proxy rather than from the attacker's connection, they may bypass IP-based
+        access controls or appear to the back-end as a request from a trusted internal source.
     </p>
 </section>
 
@@ -33,13 +84,15 @@
     </section>
 
     <section class="card">
-        <h2>2. Model</h2>
+        <h2>2. Request Pipeline Model</h2>
         <div class="flow">
-            <div>👤 Client</div>
-            <div class="arrow">↓</div>
-            <div>🚪 Front-end Proxy</div>
-            <div class="arrow">↓</div>
-            <div>🖥️ Back-end Server</div>
+            <div>👤 Attacker</div>
+            <div class="arrow">↓ Sends ambiguous request</div>
+            <div>🚪 Front-end Proxy<br><span class="hint" style="font-size: 0.8em;">(uses Content-Length)</span></div>
+            <div class="arrow">↓ Forwards what it thinks is one request</div>
+            <div>🖥️ Back-end Server<br><span class="hint" style="font-size: 0.8em;">(uses Transfer-Encoding)</span></div>
+            <div class="arrow">↓ Sees the tail as a new request</div>
+            <div>💀 Smuggled request processed</div>
         </div>
     </section>
 </div>
@@ -50,6 +103,14 @@
     <div class="mode-box {% if mode == 'unsafe' %}unsafe{% else %}safe{% endif %}">
         <div class="query">{{ highlighted_request }}</div>
     </div>
+    <p class="hint">
+        Both <code>Content-Length</code> and <code>Transfer-Encoding</code> are present.
+        {% if mode == "unsafe" %}
+            The ambiguity is allowed through — each layer parses it differently.
+        {% else %}
+            The safe handler detects the conflict and rejects or normalizes the request before it reaches the back-end.
+        {% endif %}
+    </p>
 </section>
 {% endif %}
 
@@ -73,10 +134,50 @@
 {% endif %}
 
 <section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Bypass front-end access controls (WAF, authentication proxy)</li>
+                <li>Poison the back-end connection queue to hijack other users' requests</li>
+                <li>Steal session tokens or credentials from other users' requests</li>
+                <li>Achieve reflected XSS on sites that are otherwise CSP-protected</li>
+                <li>Poison the reverse proxy cache to serve attacker content to all users</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Reject any request that includes both <code>Content-Length</code> and <code>Transfer-Encoding</code></li>
+                <li>Ensure the front-end and back-end use the same HTTP parsing library and version</li>
+                <li>Prefer HTTP/2 end-to-end — it has a single unambiguous length mechanism</li>
+                <li>Use modern reverse proxies (nginx ≥1.21, HAProxy ≥2.2) with strict CL/TE handling</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
-        Request smuggling is slightly different from classic injection.
-        The key issue is not just malicious input, but inconsistent parsing between HTTP components.
+        Request smuggling is subtly different from the other injection demos.
+        The attacker does not inject into a query language or shell — they exploit a
+        <strong>disagreement between two components</strong> about the protocol boundary.
+        The root cause is ambiguity in the HTTP spec combined with non-uniform implementations.
+        The fix is to eliminate the ambiguity entirely rather than to sanitize input.
     </p>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Vulnerable Stack</span></p>
+            <div class="query">Proxy: CL wins<br>Backend: TE wins<br>→ Different request boundaries</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Safe Stack</span></p>
+            <div class="query">Reject CL+TE conflicts<br>OR use HTTP/2 end-to-end<br>→ Single unambiguous boundary</div>
+        </div>
+    </div>
 </section>
 {% endblock %}

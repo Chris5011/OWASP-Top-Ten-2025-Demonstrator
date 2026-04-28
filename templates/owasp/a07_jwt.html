@@ -5,8 +5,55 @@
 <section class="card">
     <h2>A07: Authentication Failures — JWT Auth Bypass</h2>
     <p class="hint">
-        This module reuses the JWT integrity problem from A04, but frames it as an authentication failure:
-        the application trusts identity and role claims from a manipulated token.
+        This demo reframes the JWT vulnerability from A04 (integrity) as an
+        <strong>authentication failure</strong>: the application uses the decoded token claims
+        to determine who the user is and what they are allowed to do —
+        <em>before</em> verifying that the token has not been tampered with.
+        The result is that an attacker who can modify the token can assume any identity or role.
+    </p>
+</section>
+
+<section class="card">
+    <h2>A04 vs A07 — Different Lens, Same Token</h2>
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>A04 focus: Cryptographic Integrity</strong></p>
+            <p class="hint">
+                The question is: does the algorithm and signature verification prevent
+                the token from being modified undetected?
+                A04 covers weaknesses like accepting <code>alg=none</code> or skipping signature checks.
+            </p>
+        </div>
+        <div class="mode-box">
+            <p><strong>A07 focus: Authentication Flow</strong></p>
+            <p class="hint">
+                The question is: does the application use the token's identity claims correctly?
+                A07 covers reading and trusting identity/role claims <em>before</em> verification,
+                missing token expiry checks, and treating decoded data as authenticated facts.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Algorithm Confusion Attack</h2>
+    <p class="hint">
+        Some libraries accept multiple signature algorithms. If the server does not pin the
+        expected algorithm, an attacker can experiment:
+    </p>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>alg=none attack</strong></p>
+            <div class="query">{"alg":"none"} + modified_payload + (empty_signature)<br><br>→ Library accepts unsigned token as valid</div>
+        </div>
+        <div class="mode-box unsafe">
+            <p><strong>RS256 → HS256 confusion</strong></p>
+            <div class="query">Server normally uses RS256 (asymmetric).<br>Attacker submits HS256 token signed with the<br>public key (which the attacker knows).<br><br>→ Confused library verifies HMAC using public key</div>
+        </div>
+    </div>
+    <p class="hint" style="margin-top: 8px;">
+        Both attacks succeed because the application let the token dictate the verification method.
+        The server must decide the algorithm, not the token.
     </p>
 </section>
 
@@ -50,6 +97,13 @@
 current_user = {{ authenticated_user }}
 current_role = {{ authenticated_role }}
         </div>
+
+        <p class="hint">
+            These are the identity values the application would use to make access control decisions.
+            In unsafe mode, they come directly from the unverified token payload.
+            An attacker who can write <code>"role":"admin"</code> into the payload controls the application's
+            understanding of who they are.
+        </p>
     </section>
 </div>
 
@@ -58,12 +112,12 @@ current_role = {{ authenticated_role }}
 
     <div class="grid-2">
         <div class="mode-box">
-            <p><strong>Subject</strong></p>
+            <p><strong>Subject (who the token claims to be)</strong></p>
             <div class="query wrap">{{ authenticated_user }}</div>
         </div>
 
         <div class="mode-box">
-            <p><strong>Role</strong></p>
+            <p><strong>Role (what the token claims to allow)</strong></p>
             <div class="query wrap">{{ authenticated_role }}</div>
         </div>
     </div>
@@ -86,17 +140,20 @@ current_role = {{ authenticated_role }}
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Authentication Failure</span></p>
             <p class="hint">
-                The application treats decoded JWT claims as authenticated identity before proving that the token is valid.
+                The application reads role and identity from the JWT payload
+                before verifying the signature. This is equivalent to asking a stranger
+                their name and believing them before checking their ID.
             </p>
-            <div class="query">decode(token) → trust(user, role)</div>
+            <div class="query">decode(token) → trust(user, role) → grant access</div>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Correct Flow</span></p>
             <p class="hint">
-                The application validates the token first, then creates the authenticated user context.
+                Verification happens first. Only after the server confirms the token's integrity
+                with its own secret key are the claims accepted as representing a real user.
             </p>
-            <div class="query">verify(token) → decode(claims) → authenticate</div>
+            <div class="query">verify_signature(token, server_key)<br>→ decode(claims)<br>→ authenticate user<br>→ grant access</div>
         </div>
     </div>
 </section>
@@ -107,12 +164,20 @@ current_role = {{ authenticated_role }}
     <div class="grid-2">
         <div class="mode-box unsafe">
             <p><span class="pill pill-red">Wrong</span></p>
-            <div class="query">“JWTs are signed, so decoding them is enough.”</div>
+            <div class="query">"JWTs are signed, so decoding them is enough."</div>
+            <p class="hint">
+                Decoding is trivial — it is just Base64. The signature is what prevents tampering,
+                and it must be verified before any claim is trusted.
+            </p>
         </div>
 
         <div class="mode-box safe">
             <p><span class="pill pill-green">Better</span></p>
-            <div class="query">“Authentication starts after verification, not before.”</div>
+            <div class="query">"Authentication starts after verification, not before."</div>
+            <p class="hint">
+                Use a vetted JWT library. Configure it with your expected algorithm and secret.
+                Let the library verify — never write signature verification manually.
+            </p>
         </div>
     </div>
 </section>

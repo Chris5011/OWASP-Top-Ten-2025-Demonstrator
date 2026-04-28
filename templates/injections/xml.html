@@ -5,7 +5,60 @@
 <section class="card">
     <h2>XML Injection: Profile Update Example</h2>
     <p class="hint">
-        This demo shows how user input can become XML markup instead of plain text.
+        XML is a structured data format widely used in configuration files, SOAP web services,
+        document storage, and data interchange. When an application builds an XML document by
+        concatenating user input without escaping, the attacker can inject markup that alters
+        the document structure — breaking parsing, adding new elements, or overriding existing ones.
+    </p>
+</section>
+
+<section class="card">
+    <h2>How XML Structure Injection Works</h2>
+    <p class="hint">
+        Imagine an application stores a user's display name in XML:
+    </p>
+    <div class="query">&lt;user&gt;&lt;name&gt;Alice&lt;/name&gt;&lt;role&gt;student&lt;/role&gt;&lt;/user&gt;</div>
+
+    <div class="grid-2" style="margin-top: 12px;">
+        <div class="mode-box unsafe">
+            <p><strong>Attacker submits:</strong></p>
+            <div class="query">Alice&lt;/name&gt;&lt;role&gt;admin&lt;/role&gt;&lt;name&gt;</div>
+            <p><strong>Document becomes:</strong></p>
+            <div class="query">&lt;user&gt;&lt;name&gt;Alice&lt;/name&gt;&lt;role&gt;admin&lt;/role&gt;&lt;name&gt;&lt;/name&gt;&lt;role&gt;student&lt;/role&gt;&lt;/user&gt;</div>
+            <p class="hint">
+                Depending on how the application reads back the XML, the extra <code>&lt;role&gt;admin&lt;/role&gt;</code>
+                element may take precedence — effectively granting the user admin privileges.
+            </p>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>With escaping:</strong></p>
+            <div class="query">Alice&amp;lt;/name&amp;gt;&amp;lt;role&amp;gt;admin&amp;lt;/role&amp;gt;&amp;lt;name&amp;gt;</div>
+            <p><strong>Document stays intact:</strong></p>
+            <div class="query">&lt;user&gt;&lt;name&gt;Alice&amp;lt;/name&amp;gt;...&lt;/name&gt;&lt;role&gt;student&lt;/role&gt;&lt;/user&gt;</div>
+            <p class="hint">
+                Escaped characters appear as visible text inside the element — they are never parsed as markup.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Related: XML External Entity (XXE) Injection</h2>
+    <p class="hint">
+        A more severe sibling of XML injection is <strong>XXE</strong>. XML parsers can be configured
+        to resolve external entity references — URIs that point to local files or internal network addresses.
+        If user-supplied XML is parsed with external entities enabled, an attacker can read files like
+        <code>/etc/passwd</code>, probe internal services, or in some parsers trigger denial of service
+        via a "billion laughs" entity expansion.
+    </p>
+    <div class="query wrap">
+&lt;?xml version="1.0"?&gt;
+&lt;!DOCTYPE foo [&lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;]&gt;
+&lt;user&gt;&lt;name&gt;&amp;xxe;&lt;/name&gt;&lt;/user&gt;
+    </div>
+    <p class="hint">
+        Fix: disable DTD processing and external entity resolution in your XML parser.
+        In Java use <code>FEATURE_SECURE_PROCESSING</code>; in Python use <code>defusedxml</code>.
     </p>
 </section>
 
@@ -33,20 +86,31 @@
 
     <section class="card">
         <h2>2. Examples to Try</h2>
+        <p class="hint">Try in <strong>Unsafe</strong> mode first. Notice what happens to the document structure.</p>
         <div class="examples">
-            <div class="example">Alice</div>
-            <div class="example">&lt;admin&gt;true&lt;/admin&gt;</div>
-            <div class="example">Alice&lt;/name&gt;&lt;role&gt;admin&lt;/role&gt;&lt;name&gt;</div>
+            <div class="example">Alice &nbsp;<span class="hint">— normal name</span></div>
+            <div class="example">&lt;admin&gt;true&lt;/admin&gt; &nbsp;<span class="hint">— injects a new element</span></div>
+            <div class="example">Alice&lt;/name&gt;&lt;role&gt;admin&lt;/role&gt;&lt;name&gt; &nbsp;<span class="hint">— privilege escalation</span></div>
         </div>
     </section>
 </div>
 
 {% if xml_output %}
 <section class="card">
-    <h2>3. Generated XML</h2>
+    <h2>3. Generated XML Document</h2>
+
+    {% if mode == "unsafe" %}
+        <p><span class="pill pill-red">Unsafe Mode</span> User input is concatenated directly into the XML string.</p>
+    {% else %}
+        <p><span class="pill pill-green">Safe Mode</span> Special XML characters are escaped before insertion.</p>
+    {% endif %}
+
     <div class="mode-box {% if mode == 'unsafe' %}unsafe{% else %}safe{% endif %}">
         <div class="query">{{ xml_output }}</div>
     </div>
+    <p class="hint">
+        Watch how the highlighted input either stays as text (safe) or becomes parsed XML markup (unsafe).
+    </p>
 </section>
 {% endif %}
 
@@ -55,13 +119,64 @@
     <h2>4. Simulated Parser Result</h2>
     <div class="result {{ result_class }}">{{ result }}</div>
     <div class="query">{{ simulated_output }}</div>
+
+    {% if mode == "unsafe" %}
+        <p class="hint">
+            Depending on the parser's behavior, injected elements may shadow or override intended values.
+            An application reading <code>&lt;role&gt;</code> from this document might pick up the attacker's value.
+        </p>
+    {% else %}
+        <p class="hint">
+            The parser sees a single <code>&lt;name&gt;</code> element whose content is the literal string
+            the user typed — no extra elements, no altered structure.
+        </p>
+    {% endif %}
 </section>
 {% endif %}
 
 <section class="card">
+    <h2>Real-World Impact</h2>
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>What an attacker can achieve</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Inject additional XML elements that override role or permission fields</li>
+                <li>Corrupt stored XML data or configuration files</li>
+                <li>Exploit XXE to read local files or probe internal network services</li>
+                <li>Trigger denial of service via recursive entity expansion</li>
+            </ul>
+        </div>
+        <div class="mode-box safe">
+            <p><strong>Correct fix</strong></p>
+            <ul class="hint" style="margin: 0; padding-left: 1.2em;">
+                <li>Build XML using DOM APIs (e.g., <code>xml.etree.ElementTree</code>) rather than string concatenation</li>
+                <li>If concatenating, escape <code>&lt; &gt; &amp; ' "</code> before insertion</li>
+                <li>Disable external entities and DTD processing in your XML parser</li>
+                <li>Use JSON or other simpler formats when XML is not required</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="card">
     <h2>Teaching Point</h2>
     <p class="hint">
-        XML injection happens when user input changes the structure of an XML document.
+        XML injection follows the same pattern: user input crosses from <strong>character data</strong>
+        into <strong>XML markup</strong>. Escaping makes that crossing structurally impossible —
+        the characters that have meaning in XML syntax are encoded so the parser treats them as text,
+        not as instructions.
     </p>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Unsafe</span></p>
+            <div class="query">"&lt;name&gt;" + user_input + "&lt;/name&gt;"</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Safe</span></p>
+            <div class="query">element = ET.SubElement(user, "name")<br>element.text = user_input</div>
+        </div>
+    </div>
 </section>
 {% endblock %}
