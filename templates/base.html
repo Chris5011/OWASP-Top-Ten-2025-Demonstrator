@@ -18,6 +18,9 @@
         <h2>Modules</h2>
 
         <nav class="nav">
+            <a class="{% if active_page == 'a04' %}active{% endif %}" href="{{ url_for('cryptographic_failures') }}">
+                🔑 A04 Cryptographic Failures
+            </a>
             <a class="{% if active_page == 'home' %}active{% endif %}" href="{{ url_for('index') }}">
                 🏠 Overview
             </a>

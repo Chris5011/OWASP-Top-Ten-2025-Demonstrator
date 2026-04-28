@@ -25,7 +25,10 @@ body {
         var(--bg);
     color: var(--text);
 }
-
+.wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
 .topbar {
     padding: 28px 40px;
     border-bottom: 1px solid var(--border);

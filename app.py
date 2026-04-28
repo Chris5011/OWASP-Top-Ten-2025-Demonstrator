@@ -1,3 +1,11 @@
+import hashlib
+import hmac
+import base64
+import hashlib
+import hmac
+from argon2 import PasswordHasher
+from argon2.low_level import Type
+
 from flask import Flask, render_template, request
 from markupsafe import escape, Markup
 
@@ -730,27 +738,139 @@ def simulate_logging(mode):
     return events, logs, detection, detection_class
 
 
-@app.route("/owasp/a09", methods=["GET", "POST"])
-def logging_failures():
-    mode = "unsafe"
-    events = []
-    logs = []
-    detection = None
-    detection_class = ""
+HASHING_METHODS = {
+    "plaintext": {
+        "label": "Plaintext",
+        "purpose": "Never appropriate for password storage.",
+        "explanation": (
+            "The password is stored exactly as entered. If the database is leaked, "
+            "all passwords are immediately exposed. This is not cryptography; it is just storage."
+        ),
+        "salt_note": "No salt is used.",
+        "where_it_shines": "Nowhere for credentials. Only useful as a bad example.",
+    },
+    "sha256": {
+        "label": "SHA-256",
+        "purpose": "Fast cryptographic hash for integrity checks.",
+        "explanation": (
+            "SHA-256 is excellent for checking whether files or messages changed, "
+            "but it is intentionally fast. That speed makes offline password guessing cheap."
+        ),
+        "salt_note": "No salt is used here, so identical passwords produce identical hashes.",
+        "where_it_shines": "File integrity, checksums, digital signatures, Merkle trees.",
+    },
+    "salted_sha256": {
+        "label": "Salted SHA-256",
+        "purpose": "Shows what a salt does, but still not ideal for passwords.",
+        "explanation": (
+            "A salt prevents equal passwords from producing equal hashes and makes precomputed "
+            "rainbow tables less useful. However, SHA-256 is still far too fast for password storage."
+        ),
+        "salt_note": "A random per-password salt is mixed into the hash input.",
+        "where_it_shines": "Teaching salt concepts; not recommended for modern password storage.",
+    },
+    "hmac": {
+        "label": "HMAC-SHA-256",
+        "purpose": "Integrity and authenticity with a secret key.",
+        "explanation": (
+            "HMAC proves that someone with the secret key created or validated the message. "
+            "It is great for API signatures and tamper detection, but it is not a password hashing scheme."
+        ),
+        "salt_note": "Uses a server-side secret key, often called a pepper in password discussions.",
+        "where_it_shines": "API request signing, token integrity, webhook verification.",
+    },
+    "argon2id": {
+        "label": "Argon2id",
+        "purpose": "Modern password hashing.",
+        "explanation": (
+            "Argon2id is designed to be expensive for attackers by using configurable CPU time "
+            "and memory. The stored hash contains the algorithm parameters, salt, and derived hash."
+        ),
+        "salt_note": "The Argon2 library automatically generates and embeds a random salt.",
+        "where_it_shines": "Password storage and password-based key derivation.",
+    },
+}
+
+
+def simulate_hashing(password, mode):
+    method = HASHING_METHODS[mode]
+
+    salt = ""
+    pepper = ""
+    stored = ""
+
+    if mode == "plaintext":
+        stored = password
+        result_class = "fail"
+        effort = "No cracking needed."
+
+    elif mode == "sha256":
+        stored = hashlib.sha256(password.encode()).hexdigest()
+        result_class = "fail"
+        effort = "Very cheap to brute-force."
+
+    elif mode == "salted_sha256":
+        salt = base64.b64encode(b"classroom_random_salt").decode()
+        stored = hashlib.sha256((salt + password).encode()).hexdigest()
+        result_class = "fail"
+        effort = "Salt helps against precomputation, but guessing is still fast."
+
+    elif mode == "hmac":
+        pepper = "server_secret_pepper"
+        stored = hmac.new(
+            pepper.encode(),
+            password.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        result_class = "fail"
+        effort = "Secret key helps for message authentication, but this is not password hashing."
+
+    else:
+        ph = PasswordHasher(
+            time_cost=3,
+            memory_cost=65536,
+            parallelism=4,
+            hash_len=32,
+            salt_len=16,
+            type=Type.ID,
+        )
+        stored = ph.hash(password)
+        result_class = "success"
+        effort = "Expensive by design; memory-hard and tunable."
+
+        # PHC format:
+        # $argon2id$v=19$m=65536,t=3,p=4$base64salt$base64hash
+        parts = stored.split("$")
+        salt = parts[4] if len(parts) >= 6 else "embedded in hash"
+
+    return {
+        **method,
+        "stored": stored,
+        "salt": salt,
+        "pepper": pepper,
+        "effort": effort,
+        "result_class": result_class,
+    }
+
+
+@app.route("/owasp/a04", methods=["GET", "POST"])
+def cryptographic_failures():
+    password = "password123"
+    mode = "plaintext"
 
     if request.method == "POST":
-        mode = request.form.get("mode", "unsafe")
+        password = request.form.get("password", "password123")
+        mode = request.form.get("mode", "plaintext")
 
-    events, logs, detection, detection_class = simulate_logging(mode)
+    result = simulate_hashing(password, mode)
 
     return render_template(
-        "owasp/a09.html",
-        active_page="a09",
+        "owasp/a04.html",
+        active_page="a04",
+        password=password,
         mode=mode,
-        events=events,
-        logs=logs,
-        detection=detection,
-        detection_class=detection_class
+        result=result,
+        methods=HASHING_METHODS,
     )
 
 

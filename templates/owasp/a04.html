@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}A04: Cryptographic Failures{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>A04: Cryptographic Failures — Password Hashing</h2>
+    <p class="hint">
+        This module compares storage approaches and shows why “hashing” alone is not enough.
+        The correct choice depends on the purpose: integrity, authenticity, or password storage.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Input</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Password
+                <input type="text" name="password" value="{{ password }}">
+            </label>
+
+            <label>
+                Method
+                <select name="mode">
+                    <option value="plaintext" {% if mode == "plaintext" %}selected{% endif %}>❌ Plaintext</option>
+                    <option value="sha256" {% if mode == "sha256" %}selected{% endif %}>⚠️ SHA-256</option>
+                    <option value="salted_sha256" {% if mode == "salted_sha256" %}selected{% endif %}>⚠️ Salted SHA-256</option>
+                    <option value="hmac" {% if mode == "hmac" %}selected{% endif %}>⚠️ HMAC-SHA-256</option>
+                    <option value="argon2id" {% if mode == "argon2id" %}selected{% endif %}>✅ Argon2id</option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Store Password</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Database View</h2>
+
+        <p><span class="pill {% if result.result_class == 'success' %}pill-green{% else %}pill-red{% endif %}">
+            {{ result.label }}
+        </span></p>
+
+        <div class="query wrap">
+users.password = {{ result.stored }}
+        </div>
+    </section>
+</div>
+
+<section class="card">
+    <h2>3. Salt / Secret View</h2>
+
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>Salt</strong></p>
+            {% if result.salt %}
+                <div class="query wrap">{{ result.salt }}</div>
+            {% else %}
+                <p class="hint">{{ result.salt_note }}</p>
+            {% endif %}
+        </div>
+
+        <div class="mode-box">
+            <p><strong>Server-side secret / pepper</strong></p>
+            {% if result.pepper %}
+                <div class="query wrap">{{ result.pepper }}</div>
+            {% else %}
+                <p class="hint">No separate server-side secret is used in this example.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>4. Analysis</h2>
+
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>Purpose:</strong> {{ result.purpose }}</p>
+            <p><strong>Attacker effort:</strong> {{ result.effort }}</p>
+            <p><strong>Where it shines:</strong> {{ result.where_it_shines }}</p>
+        </div>
+
+        <div class="mode-box">
+            <p><strong>Explanation</strong></p>
+            <p class="hint">{{ result.explanation }}</p>
+            <p class="hint"><strong>Salt note:</strong> {{ result.salt_note }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>5. Comparison Cheat Sheet</h2>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Good For</th>
+                    <th>Password Storage?</th>
+                    <th>Main Problem / Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Plaintext</td>
+                    <td>Nothing security-related</td>
+                    <td>❌ Never</td>
+                    <td>Immediate exposure after database leak</td>
+                </tr>
+                <tr>
+                    <td>SHA-256</td>
+                    <td>Integrity checks</td>
+                    <td>❌ No</td>
+                    <td>Too fast; no per-password uniqueness without salt</td>
+                </tr>
+                <tr>
+                    <td>Salted SHA-256</td>
+                    <td>Explaining salts</td>
+                    <td>⚠️ Still no</td>
+                    <td>Salt helps, but the hash is still too fast</td>
+                </tr>
+                <tr>
+                    <td>HMAC-SHA-256</td>
+                    <td>Authenticity and tamper detection</td>
+                    <td>⚠️ Not by itself</td>
+                    <td>Keyed integrity primitive, not a password hashing function</td>
+                </tr>
+                <tr>
+                    <td>Argon2id</td>
+                    <td>Password storage</td>
+                    <td>✅ Yes</td>
+                    <td>Slow and memory-hard by design</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Teaching Point</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Wrong</span></p>
+            <div class="query">“It is hashed, so it is safe.”</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Better</span></p>
+            <div class="query">“What is this primitive designed to protect against?”</div>
+        </div>
+    </div>
+</section>
+{% endblock %}
