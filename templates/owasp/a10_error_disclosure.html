@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}A10: Error Disclosure{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>A10: Mishandling of Exceptional Conditions — Error Disclosure</h2>
+    <p class="hint">
+        This demo shows how verbose error handling can turn an exception into reconnaissance.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Trigger</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Exception type
+                <select name="error_type">
+                    <option value="db" {% if error_type == "db" %}selected{% endif %}>Database lookup error</option>
+                    <option value="null" {% if error_type == "null" %}selected{% endif %}>Null / missing object</option>
+                    <option value="value" {% if error_type == "value" %}selected{% endif %}>Invalid value conversion</option>
+                </select>
+            </label>
+
+            <label>
+                Error handling mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Debug output exposed</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Generic production error</option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Trigger Exception</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Browser View</h2>
+
+        <p>
+            <span class="pill {% if mode == 'unsafe' %}pill-red{% else %}pill-green{% endif %}">
+                {{ result.result }}
+            </span>
+        </p>
+
+        <p class="hint"><strong>Triggered URL:</strong></p>
+        <div class="query wrap">{{ result.trigger }}</div>
+
+        <p class="hint"><strong>User-facing message:</strong></p>
+        <div class="query wrap">{{ result.user_message }}</div>
+    </section>
+</div>
+
+{% if result.exposed_details %}
+<section class="card">
+    <h2>3. Exposed Debug Details</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>Exception</strong></p>
+            <div class="query wrap">{{ result.exception_name }}</div>
+        </div>
+
+        <div class="mode-box unsafe">
+            <p><strong>Internal File Paths</strong></p>
+            <div class="query wrap">{{ result.exposed_details.file_paths }}</div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><strong>Stack Trace</strong></p>
+            <div class="query wrap">{{ result.exposed_details.stack_trace }}</div>
+        </div>
+
+        <div class="mode-box unsafe">
+            <p><strong>Environment-like Values</strong></p>
+            <div class="query wrap">{{ result.exposed_details.environment }}</div>
+        </div>
+    </div>
+</section>
+{% else %}
+<section class="card">
+    <h2>3. Server-side Handling</h2>
+
+    <div class="mode-box safe">
+        <p><strong>Production-safe behavior</strong></p>
+        <div class="query wrap">
+Request ID: {{ result.request_id }}
+
+Detailed exception, stack trace, and environment data are logged server-side only.
+The browser receives no internal implementation details.
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>4. Decision Path</h2>
+
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>What happened</strong></p>
+            {% for step in result.decision_steps %}
+                <p class="hint">{{ step }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="mode-box">
+            <p><strong>Teaching Point</strong></p>
+            <div class="query wrap">
+Errors should help defenders, not attackers.
+Show generic messages to users.
+Log detailed diagnostics internally.
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}A07: Authentication Failures — Session Attacks{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>A07: Authentication Failures — Session Hijacking / Fixation</h2>
+    <p class="hint">
+        This module shows how authentication can be implemented correctly, while the session lifecycle still allows account takeover.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Session Scenario</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                Session ID
+                <input type="text" name="session_id" value="{{ session_id }}">
+            </label>
+
+            <label>
+                Username
+                <input type="text" name="username" value="{{ username }}">
+            </label>
+
+            <label>
+                Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Unsafe: Reuse session ID after login</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Safe: Rotate session ID after login</option>
+                </select>
+            </label>
+
+            <div class="grid-2">
+                <button type="submit" name="action" value="visit">1️⃣ Visit Page</button>
+                <button type="submit" name="action" value="login">2️⃣ Login</button>
+            </div>
+
+            <div class="grid-2">
+                <button type="submit" name="action" value="attacker_reuse">3️⃣ Attacker Reuses ID</button>
+                <button type="submit" name="action" value="logout">4️⃣ Logout</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Result</h2>
+
+        <p>
+            <span class="pill {% if result.result_class == 'success' %}pill-green{% else %}pill-red{% endif %}">
+                {{ result.result }}
+            </span>
+        </p>
+
+        <div class="query wrap">
+before_session_id = {{ before_session_id }}
+current_session_id = {{ session_id }}
+authenticated = {{ result.session.authenticated }}
+user = {{ result.session.user }}
+created_by = {{ result.session.created_by }}
+        </div>
+    </section>
+</div>
+
+<section class="card">
+    <h2>3. Attack Explanation</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Session Fixation</span></p>
+            <p class="hint">
+                The attacker forces or predicts a session ID before login.
+                If the application keeps that ID after login, the attacker can reuse it.
+            </p>
+            <div class="query">known_session_id → victim_login → attacker_reuse</div>
+        </div>
+
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Session Hijacking</span></p>
+            <p class="hint">
+                The attacker steals an already authenticated session ID.
+                If the session is still valid, authentication is bypassed completely.
+            </p>
+            <div class="query">stolen_session_id → authenticated_request</div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>4. Decision Flow</h2>
+
+    <div class="mode-box">
+        {% for step in result.decision_steps %}
+            <p>{{ step }}</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="card">
+    <h2>5. Server-Side Session Store</h2>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Session ID</th>
+                    <th>User</th>
+                    <th>Authenticated</th>
+                    <th>Created By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sid, sess in result.all_sessions.items() %}
+                <tr>
+                    <td><code>{{ sid }}</code></td>
+                    <td>{{ sess.user }}</td>
+                    <td>{{ sess.authenticated }}</td>
+                    <td>{{ sess.created_by }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Teaching Point</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Wrong</span></p>
+            <div class="query">“The user logged in, so the session is trusted.”</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Better</span></p>
+            <div class="query">“Authentication must create a fresh session.”</div>
+        </div>
+    </div>
+</section>
+{% endblock %}

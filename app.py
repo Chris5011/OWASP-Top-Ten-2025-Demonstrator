@@ -3,10 +3,13 @@ import hmac
 import base64
 import hashlib
 import hmac
+import json
+import pickle
+
 from argon2 import PasswordHasher
 from argon2.low_level import Type
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from markupsafe import escape, Markup
 
 app = Flask(__name__)
@@ -38,6 +41,7 @@ OWASP_NAV = [
         "label": "A04 Cryptographic Failures",
         "items": [
             {"id": "a04", "label": "Password Hashing", "endpoint": "cryptographic_failures"},
+            {"id": "a04_jwt", "label": "JWT Token Integrity", "endpoint": "jwt_crypto_failures"},
             {"id": "a04_transit", "label": "Data in Transit", "endpoint": None},
             {"id": "a04_keys", "label": "Key Management", "endpoint": None},
         ],
@@ -59,21 +63,23 @@ OWASP_NAV = [
         "id": "a06",
         "label": "A06 Insecure Design",
         "items": [
-            {"id": "a06_soon", "label": "Coming Soon", "endpoint": None},
+            {"id": "a06_insecure", "label": "insecure designed app", "endpoint": "insecure_design"},
         ],
     },
     {
         "id": "a07",
         "label": "A07 Authentication Failures",
         "items": [
-            {"id": "a07_soon", "label": "Coming Soon", "endpoint": None},
+            {"id": "a07_sessions", "label": "Session Hijacking / Fixation", "endpoint": "session_failures"},
+            {"id": "a07_jwt", "label": "JWT Auth Bypass", "endpoint": "jwt_auth_failures"},
         ],
     },
     {
         "id": "a08",
         "label": "A08 Software and Data Integrity Failures",
         "items": [
-            {"id": "a08_soon", "label": "Coming Soon", "endpoint": None},
+            {"id": "a08_pickle", "label": "Insecure Deserialization", "endpoint": "a08_pickle_demo"},
+            {"id": "a08_cdn", "label": "CDN Integrity / SRI", "endpoint": "a08_cdn_demo"},
         ],
     },
     {
@@ -87,7 +93,8 @@ OWASP_NAV = [
         "id": "a10",
         "label": "A10 Mishandling of Exceptional Conditions",
         "items": [
-            {"id": "a10_soon", "label": "Coming Soon", "endpoint": None},
+            {"id": "a10_fail_open", "label": "Fail-open Authorization", "endpoint": "a10_fail_open_demo"},
+            {"id": "a10_error_disclosure", "label": "Error Disclosure", "endpoint": "a10_error_disclosure_demo"},
         ],
     },
 ]
@@ -960,6 +967,492 @@ def cryptographic_failures():
     )
 
 
+PRODUCTS = {
+    "coffee": {"name": "Coffee Mug", "price": 12.99},
+    "hoodie": {"name": "Cyber Hoodie", "price": 49.99},
+    "sticker": {"name": "Sticker Pack", "price": 4.99},
+}
+
+
+def simulate_insecure_design(product_id, quantity, mode):
+    product = PRODUCTS.get(product_id, PRODUCTS["coffee"])
+    price = product["price"]
+
+    try:
+        quantity = int(quantity)
+    except ValueError:
+        quantity = 1
+
+    if mode == "unsafe":
+        total = price * quantity
+
+        if total < 0:
+            result = "⚠️ Order accepted — negative quantity created store credit!"
+            result_class = "success"
+        else:
+            result = "✅ Order accepted"
+            result_class = "success"
+
+        decision_steps = [
+            "1. User selected product ✅",
+            "2. User entered quantity ✅",
+            "3. System calculated price × quantity ✅",
+            "4. Missing business rule: quantity must be positive ❌",
+            "5. Order accepted ⚠️",
+        ]
+
+    else:
+        if quantity <= 0:
+            total = 0
+            result = "❌ Order rejected — quantity must be at least 1"
+            result_class = "fail"
+            decision_steps = [
+                "1. User selected product ✅",
+                "2. User entered quantity ✅",
+                "3. Business rule check: quantity >= 1 ❌",
+                "4. Order rejected ✅",
+            ]
+        else:
+            total = price * quantity
+            result = "✅ Order accepted — business rule enforced"
+            result_class = "success"
+            decision_steps = [
+                "1. User selected product ✅",
+                "2. User entered quantity ✅",
+                "3. Business rule check: quantity >= 1 ✅",
+                "4. Order accepted ✅",
+            ]
+
+    return product, quantity, total, result, result_class, decision_steps
+
+
+
+
+JWT_SECRET = "classroom-secret"
+
+def b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+def b64url_decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+def make_demo_jwt(username="alice", role="user", alg="HS256"):
+    header = {"typ": "JWT", "alg": alg}
+    payload = {"sub": username, "role": role, "lesson": "OWASP A04/A07"}
+
+    header_b64 = b64url_encode(json.dumps(header).encode())
+    payload_b64 = b64url_encode(json.dumps(payload).encode())
+
+    if alg == "none":
+        return f"{header_b64}.{payload_b64}."
+
+    signing_input = f"{header_b64}.{payload_b64}".encode()
+    signature = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
+
+    return f"{header_b64}.{payload_b64}.{b64url_encode(signature)}"
+
+
+def parse_demo_jwt(token):
+    try:
+        header_b64, payload_b64, signature = token.split(".")
+        header = json.loads(b64url_decode(header_b64))
+        payload = json.loads(b64url_decode(payload_b64))
+        return header, payload, signature, None
+    except Exception as exc:
+        return None, None, None, f"Invalid token format: {exc}"
+
+
+def verify_demo_jwt(token, mode):
+    header, payload, signature, error = parse_demo_jwt(token)
+
+    if error:
+        return {
+            "header": None,
+            "payload": None,
+            "result": f"❌ {error}",
+            "result_class": "fail",
+            "decision_steps": ["1. Token parsing failed ❌"],
+        }
+
+    alg = header.get("alg", "none")
+
+    if mode == "unsafe":
+        decision_steps = [
+            "1. Token parsed ✅",
+            f"2. Header says alg={alg} ✅",
+            "3. Application trusts the token header ❌",
+            "4. Signature verification skipped or weakened ⚠️",
+            "5. Payload accepted as identity ⚠️",
+        ]
+
+        if payload.get("role") == "admin":
+            result = "⚠️ Admin access granted — token payload was trusted!"
+            result_class = "success"
+        else:
+            result = "✅ User token accepted"
+            result_class = "success"
+
+    else:
+        signing_input = ".".join(token.split(".")[:2]).encode()
+        expected_signature = b64url_encode(
+            hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
+        )
+
+        decision_steps = [
+            "1. Token parsed ✅",
+            "2. Server ignores attacker-controlled alg header ✅",
+            "3. Server enforces expected algorithm: HS256 ✅",
+            "4. Signature recalculated with server secret ✅",
+        ]
+
+        if alg != "HS256":
+            result = "❌ Token rejected — unsupported algorithm"
+            result_class = "fail"
+            decision_steps.append("5. Token rejected ✅")
+        elif not hmac.compare_digest(signature, expected_signature):
+            result = "❌ Token rejected — signature mismatch"
+            result_class = "fail"
+            decision_steps.append("5. Signature mismatch detected ✅")
+        else:
+            result = "✅ Token accepted — signature valid"
+            result_class = "success"
+            decision_steps.append("5. Signature valid ✅")
+
+    return {
+        "header": header,
+        "payload": payload,
+        "signature": signature,
+        "result": result,
+        "result_class": result_class,
+        "decision_steps": decision_steps,
+    }
+
+
+def tamper_jwt_to_admin(token, alg="none"):
+    header, payload, signature, error = parse_demo_jwt(token)
+    if error:
+        return token
+
+    payload["role"] = "admin"
+    header["alg"] = alg
+
+    header_b64 = b64url_encode(json.dumps(header).encode())
+    payload_b64 = b64url_encode(json.dumps(payload).encode())
+
+    if alg == "none":
+        return f"{header_b64}.{payload_b64}."
+
+    return f"{header_b64}.{payload_b64}.{signature}"
+
+@app.route("/owasp/a04/jwt", methods=["GET", "POST"])
+def jwt_crypto_failures():
+    token = make_demo_jwt()
+    mode = "unsafe"
+    action = "original"
+
+    if request.method == "POST":
+        token = request.form.get("token", token)
+        mode = request.form.get("mode", "unsafe")
+        action = request.form.get("action", "verify")
+
+        if action == "tamper_none":
+            token = tamper_jwt_to_admin(token, "none")
+        elif action == "tamper_hs256":
+            token = tamper_jwt_to_admin(token, "HS256")
+
+    result = verify_demo_jwt(token, mode)
+
+    return render_template(
+        "owasp/a04_jwt.html",
+        active_page="a04_jwt",
+        token=token,
+        mode=mode,
+        result=result,
+    )
+
+
+@app.route("/owasp/a06", methods=["GET", "POST"])
+def insecure_design():
+    product_id = "coffee"
+    quantity = "1"
+    mode = "unsafe"
+
+    if request.method == "POST":
+        product_id = request.form.get("product_id", "coffee")
+        quantity = request.form.get("quantity", "1")
+        mode = request.form.get("mode", "unsafe")
+
+    product, quantity, total, result, result_class, decision_steps = simulate_insecure_design(
+        product_id,
+        quantity,
+        mode
+    )
+
+    return render_template(
+        "owasp/a06.html",
+        active_page="a06",
+        products=PRODUCTS,
+        product_id=product_id,
+        product=product,
+        quantity=quantity,
+        total=total,
+        mode=mode,
+        result=result,
+        result_class=result_class,
+        decision_steps=decision_steps,
+    )
+
+DEMO_SESSIONS = {
+    "ATTACKER-KNOWN-SESSION": {
+        "user": None,
+        "authenticated": False,
+        "created_by": "attacker",
+    }
+}
+
+
+def simulate_session_attack(action, mode, session_id, username):
+    session_id = session_id or "ATTACKER-KNOWN-SESSION"
+    username = username or "alice"
+
+    if session_id not in DEMO_SESSIONS:
+        DEMO_SESSIONS[session_id] = {
+            "user": None,
+            "authenticated": False,
+            "created_by": "browser",
+        }
+
+    before_session_id = session_id
+    session = DEMO_SESSIONS[session_id]
+
+    if action == "visit":
+        result = "ℹ️ Anonymous session created / reused"
+        result_class = "success"
+
+    elif action == "login":
+        if mode == "unsafe":
+            session["user"] = username
+            session["authenticated"] = True
+
+            result = "⚠️ Login successful — old session ID was reused!"
+            result_class = "success"
+
+        else:
+            new_session_id = f"SERVER-GENERATED-{hashlib.sha256((session_id + username).encode()).hexdigest()[:12]}"
+
+            DEMO_SESSIONS[new_session_id] = {
+                "user": username,
+                "authenticated": True,
+                "created_by": "server",
+            }
+
+            session_id = new_session_id
+            session = DEMO_SESSIONS[session_id]
+
+            result = "✅ Login successful — session ID rotated after authentication"
+            result_class = "success"
+
+    elif action == "attacker_reuse":
+        if session.get("authenticated"):
+            result = f"⚠️ Attacker reused session and became {session.get('user')}!"
+            result_class = "success"
+        else:
+            result = "❌ Attacker reused session, but it is not authenticated"
+            result_class = "fail"
+
+    elif action == "logout":
+        if mode == "unsafe":
+            session["authenticated"] = False
+            session["user"] = None
+
+            result = "⚠️ Logout performed — but session ID still exists and can be reused"
+            result_class = "fail"
+        else:
+            DEMO_SESSIONS.pop(session_id, None)
+
+            result = "✅ Logout performed — session invalidated server-side"
+            result_class = "success"
+
+    else:
+        result = "ℹ️ Select an action"
+        result_class = "fail"
+
+    decision_steps = []
+
+    if mode == "unsafe":
+        decision_steps = [
+            "1. Browser presents a session ID ✅",
+            "2. Server accepts the existing session ID ✅",
+            "3. User logs in ✅",
+            "4. Server keeps the same session ID ❌",
+            "5. Anyone with that ID can reuse the authenticated session ⚠️",
+        ]
+    else:
+        decision_steps = [
+            "1. Browser presents a session ID ✅",
+            "2. User logs in ✅",
+            "3. Server generates a new session ID ✅",
+            "4. Old session ID becomes useless ✅",
+            "5. Logout invalidates the server-side session ✅",
+        ]
+
+    return {
+        "before_session_id": before_session_id,
+        "session_id": session_id,
+        "session": session,
+        "result": result,
+        "result_class": result_class,
+        "decision_steps": decision_steps,
+        "all_sessions": DEMO_SESSIONS,
+    }
+
+
+@app.route("/owasp/a07/sessions", methods=["GET", "POST"])
+def session_failures():
+    mode = "unsafe"
+    action = "visit"
+    session_id = "ATTACKER-KNOWN-SESSION"
+    username = "alice"
+
+    if request.method == "POST":
+        mode = request.form.get("mode", "unsafe")
+        action = request.form.get("action", "visit")
+        session_id = request.form.get("session_id", "ATTACKER-KNOWN-SESSION")
+        username = request.form.get("username", "alice")
+
+    result = simulate_session_attack(action, mode, session_id, username)
+
+    return render_template(
+        "owasp/a07_sessions.html",
+        active_page="a07_sessions",
+        mode=mode,
+        action=action,
+        session_id=result["session_id"],
+        before_session_id=result["before_session_id"],
+        username=username,
+        result=result,
+    )
+
+@app.route("/owasp/a07/jwt-auth", methods=["GET", "POST"])
+def jwt_auth_failures():
+    token = make_demo_jwt()
+    mode = "unsafe"
+    action = "original"
+
+    if request.method == "POST":
+        token = request.form.get("token", token)
+        mode = request.form.get("mode", "unsafe")
+        action = request.form.get("action", "verify")
+
+        if action == "tamper_none":
+            token = tamper_jwt_to_admin(token, "none")
+        elif action == "tamper_hs256":
+            token = tamper_jwt_to_admin(token, "HS256")
+
+    result = verify_demo_jwt(token, mode)
+
+    authenticated_user = result["payload"].get("sub") if result["payload"] else None
+    authenticated_role = result["payload"].get("role") if result["payload"] else None
+
+    return render_template(
+        "owasp/a07_jwt.html",
+        active_page="a07_jwt",
+        token=token,
+        mode=mode,
+        result=result,
+        authenticated_user=authenticated_user,
+        authenticated_role=authenticated_role,
+    )
+
+def harmless_demo_trigger():
+    return {
+        "status": "executed",
+        "message": "Harmless demo function triggered during deserialization."
+    }
+
+
+class DemoPayload:
+    def __reduce__(self):
+        return harmless_demo_trigger, ()
+
+
+@app.route("/owasp/a08/deserialization")
+def a08_pickle_demo():
+    return render_template(
+        "owasp/a08/deserialization.html",
+        active_page="a08_pickle",
+    )
+
+
+@app.route("/owasp/a08/cdn-integrity")
+def a08_cdn_demo():
+    return render_template(
+        "owasp/a08/cdn_integrity.html",
+        active_page="a08_cdn",
+    )
+
+@app.route("/a08/pickle/generate", methods=["GET"])
+def a08_generate_pickle_payload():
+    payload = pickle.dumps(DemoPayload())
+    encoded = base64.b64encode(payload).decode("utf-8")
+
+    return jsonify({
+        "payload": encoded,
+        "explanation": "This payload calls a harmless server-side function when deserialized."
+    })
+
+
+@app.route("/a08/pickle/vulnerable", methods=["POST"])
+def a08_vulnerable_pickle():
+    data = request.get_json(silent=True) or {}
+    encoded_payload = data.get("payload", "")
+
+    try:
+        raw_payload = base64.b64decode(encoded_payload)
+        result = pickle.loads(raw_payload)
+
+        return jsonify({
+            "mode": "vulnerable",
+            "result": result,
+            "lesson": "The application trusted serialized data and executed behavior embedded in it."
+        })
+
+    except Exception as e:
+        return jsonify({
+            "mode": "vulnerable",
+            "error": str(e)
+        }), 400
+
+
+@app.route("/a08/pickle/safe", methods=["POST"])
+def a08_safe_deserialization():
+    data = request.get_json(silent=True) or {}
+    encoded_payload = data.get("payload", "")
+
+    try:
+        raw_payload = base64.b64decode(encoded_payload)
+        parsed = json.loads(raw_payload.decode("utf-8"))
+
+        return jsonify({
+            "mode": "safe",
+            "result": parsed,
+            "lesson": "JSON data was parsed as plain data. No object behavior was restored."
+        })
+
+    except Exception:
+        return jsonify({
+            "mode": "safe",
+            "error": "Rejected: expected JSON data, not native serialized objects."
+        }), 400
+
+
+@app.route("/a08/cdn/script")
+def a08_cdn_script():
+    compromised = request.args.get("compromised") == "true"
+    filename = "compromised-lib.js" if compromised else "trusted-lib.js"
+    return send_from_directory("static/a08", filename)
+
 @app.route("/owasp/a09", methods=["GET", "POST"])
 def logging_failures():
     mode = "unsafe"
@@ -976,6 +1469,181 @@ def logging_failures():
         logs=logs,
         detection=detection,
         detection_class=detection_class,
+    )
+
+def simulate_fail_open_auth(auth_service_state, user_role, mode):
+    decision_steps = []
+
+    try:
+        decision_steps.append("1. User requests admin resource ✅")
+        decision_steps.append("2. Application calls authorization service ✅")
+
+        if auth_service_state == "down":
+            raise ConnectionError("Authorization service timeout")
+
+        is_admin = user_role == "admin"
+        decision_steps.append("3. Authorization service returned a decision ✅")
+
+    except Exception as exc:
+        decision_steps.append(f"3. Authorization service failed: {exc} ⚠️")
+
+        if mode == "unsafe":
+            is_admin = True
+            decision_steps.append("4. Exception handler defaults to allow ❌")
+        else:
+            is_admin = False
+            decision_steps.append("4. Exception handler defaults to deny ✅")
+
+    if is_admin:
+        admin_panel_visible = True
+
+        if auth_service_state == "down":
+            result = "⚠️ Access granted — failure path allowed the user into the admin panel!"
+            result_class = "success"
+        elif user_role == "admin":
+            result = "✅ Access granted — authorization service confirmed admin role"
+            result_class = "success"
+        else:
+            result = "⚠️ Access granted — unexpected authorization decision"
+            result_class = "success"
+
+    else:
+        admin_panel_visible = False
+
+        if auth_service_state == "down":
+            result = "❌ Access denied — system failed closed"
+            result_class = "fail"
+        else:
+            result = "❌ Access denied — user is not an admin"
+            result_class = "fail"
+
+    return {
+        "result": result,
+        "result_class": result_class,
+        "decision_steps": decision_steps,
+        "admin_panel_visible": admin_panel_visible,
+        "auth_service_state": auth_service_state,
+        "user_role": user_role,
+        "mode": mode,
+    }
+
+
+@app.route("/owasp/a10/fail-open", methods=["GET", "POST"])
+def a10_fail_open_demo():
+    auth_service_state = "down"
+    user_role = "user"
+    mode = "unsafe"
+
+    if request.method == "POST":
+        auth_service_state = request.form.get("auth_service_state", "down")
+        user_role = request.form.get("user_role", "user")
+        mode = request.form.get("mode", "unsafe")
+
+    result = simulate_fail_open_auth(auth_service_state, user_role, mode)
+
+    return render_template(
+        "owasp/a10_fail_open.html",
+        active_page="a10_fail_open",
+        auth_service_state=auth_service_state,
+        user_role=user_role,
+        mode=mode,
+        result=result,
+    )
+
+
+def simulate_error_disclosure(error_type, mode):
+    fake_request_id = "REQ-A10-8f4c2"
+
+    internal_details = {
+        "stack_trace": (
+            "Traceback (most recent call last):\n"
+            "  File \"/srv/app/shop/views.py\", line 88, in checkout\n"
+            "    order = db.session.query(Order).filter_by(id=order_id).one()\n"
+            "  File \"/srv/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py\", line 2798, in one\n"
+            "    raise NoResultFound(\"No row was found\")\n"
+            "sqlalchemy.exc.NoResultFound: No row was found"
+        ),
+        "environment": (
+            "FLASK_DEBUG=true\n"
+            "DATABASE_URL=postgresql://shop_user:SuperSecretDemoPassword@db.internal:5432/shop\n"
+            "JWT_SECRET=classroom-demo-secret\n"
+            "APP_ENV=development"
+        ),
+        "file_paths": (
+            "/srv/app/shop/views.py\n"
+            "/srv/app/config.py\n"
+            "/srv/app/.env\n"
+            "/srv/app/.venv/lib/python3.12/site-packages/"
+        ),
+    }
+
+    if error_type == "db":
+        exception_name = "sqlalchemy.exc.NoResultFound"
+        trigger = "/checkout?order_id=999999"
+    elif error_type == "null":
+        exception_name = "AttributeError: 'NoneType' object has no attribute 'role'"
+        trigger = "/admin/profile?user_id=deleted-user"
+    else:
+        exception_name = "ValueError: invalid literal for int() with base 10"
+        trigger = "/invoice?id=abc"
+
+    if mode == "unsafe":
+        result = "⚠️ Detailed error exposed to the browser"
+        result_class = "success"
+        user_message = (
+            "Debug page visible. Stack trace, internal paths, framework details, "
+            "and environment-like secrets are shown to the user."
+        )
+        exposed_details = internal_details
+        decision_steps = [
+            "1. Unexpected input triggers exception ✅",
+            "2. Application catches nothing / debug handler activates ⚠️",
+            "3. Framework renders detailed debug page ❌",
+            "4. Attacker learns internals, paths, secrets, and dependencies ⚠️",
+        ]
+    else:
+        result = "✅ Generic error shown — details kept server-side"
+        result_class = "success"
+        user_message = f"Something went wrong. Please contact support with request ID {fake_request_id}."
+        exposed_details = None
+        decision_steps = [
+            "1. Unexpected input triggers exception ✅",
+            "2. Application handles error centrally ✅",
+            "3. User receives generic message ✅",
+            "4. Detailed diagnostics are logged server-side only ✅",
+        ]
+
+    return {
+        "result": result,
+        "result_class": result_class,
+        "user_message": user_message,
+        "exposed_details": exposed_details,
+        "decision_steps": decision_steps,
+        "exception_name": exception_name,
+        "trigger": trigger,
+        "request_id": fake_request_id,
+        "mode": mode,
+        "error_type": error_type,
+    }
+
+
+@app.route("/owasp/a10/error-disclosure", methods=["GET", "POST"])
+def a10_error_disclosure_demo():
+    error_type = "db"
+    mode = "unsafe"
+
+    if request.method == "POST":
+        error_type = request.form.get("error_type", "db")
+        mode = request.form.get("mode", "unsafe")
+
+    result = simulate_error_disclosure(error_type, mode)
+
+    return render_template(
+        "owasp/a10_error_disclosure.html",
+        active_page="a10_error_disclosure",
+        error_type=error_type,
+        mode=mode,
+        result=result,
     )
 
 

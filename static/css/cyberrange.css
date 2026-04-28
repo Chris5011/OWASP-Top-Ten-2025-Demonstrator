@@ -398,3 +398,19 @@ tr:nth-child(even) td {
     opacity: 0.35;
     font-style: italic;
 }
+
+.success-box {
+    padding: 1rem;
+    border-radius: 8px;
+    background: #173f2a;
+    color: #7dffb2;
+    margin-top: 0.5rem;
+}
+
+.danger-box {
+    padding: 1rem;
+    border-radius: 8px;
+    background: #4a1515;
+    color: #ff8a8a;
+    margin-top: 0.5rem;
+}

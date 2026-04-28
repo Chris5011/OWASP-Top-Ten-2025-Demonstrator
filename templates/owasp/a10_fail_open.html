@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}A10: Fail-open Authorization{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>A10: Mishandling of Exceptional Conditions — Fail-open Authorization</h2>
+    <p class="hint">
+        This demo shows what happens when an authorization check fails and the application makes
+        a dangerous fallback decision.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Input</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                User role
+                <select name="user_role">
+                    <option value="user" {% if user_role == "user" %}selected{% endif %}>Normal user</option>
+                    <option value="admin" {% if user_role == "admin" %}selected{% endif %}>Admin</option>
+                </select>
+            </label>
+
+            <label>
+                Authorization service
+                <select name="auth_service_state">
+                    <option value="online" {% if auth_service_state == "online" %}selected{% endif %}>Online</option>
+                    <option value="down" {% if auth_service_state == "down" %}selected{% endif %}>Down / timeout</option>
+                </select>
+            </label>
+
+            <label>
+                Exception handling mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Fail-open</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Fail-closed</option>
+                </select>
+            </label>
+
+            <button type="submit">▶ Check Access</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Result</h2>
+
+        <p>
+            <span class="pill {% if result.result_class == 'success' %}pill-red{% else %}pill-green{% endif %}">
+                {{ result.result }}
+            </span>
+        </p>
+
+        {% if result.admin_panel_visible %}
+            <div class="mode-box unsafe">
+                <p><strong>Admin Panel</strong></p>
+                <div class="query">Visible: user management, billing data, system settings</div>
+            </div>
+        {% else %}
+            <div class="mode-box safe">
+                <p><strong>Admin Panel</strong></p>
+                <div class="query">Hidden: access denied</div>
+            </div>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card">
+    <h2>3. Decision Path</h2>
+
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>What the application did</strong></p>
+            {% for step in result.decision_steps %}
+                <p class="hint">{{ step }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="mode-box">
+            <p><strong>Teaching Point</strong></p>
+            <div class="query wrap">
+On authorization errors, timeout, missing dependencies, or unexpected states:
+deny by default.
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>4. Code Pattern</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Wrong</span></p>
+            <div class="query wrap">except Exception:
+    return True</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Better</span></p>
+            <div class="query wrap">except Exception:
+    log_error()
+    return False</div>
+        </div>
+    </div>
+</section>
+{% endblock %}

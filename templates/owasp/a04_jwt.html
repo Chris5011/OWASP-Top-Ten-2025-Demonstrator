@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}A04: Cryptographic Failures — JWT Integrity{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h2>A04: Cryptographic Failures — JWT Token Integrity</h2>
+    <p class="hint">
+        This module shows why JWTs are only trustworthy when their signature and algorithm are verified correctly.
+        The token payload is readable by design — integrity comes from the signature.
+    </p>
+</section>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>1. Token Input</h2>
+
+        <form method="POST" class="form-stack">
+            <label>
+                JWT Token
+                <textarea name="token" rows="7">{{ token }}</textarea>
+            </label>
+
+            <label>
+                Verification Mode
+                <select name="mode">
+                    <option value="unsafe" {% if mode == "unsafe" %}selected{% endif %}>❌ Unsafe: Trust token header / weak verification</option>
+                    <option value="safe" {% if mode == "safe" %}selected{% endif %}>✅ Safe: Enforce HS256 + verify signature</option>
+                </select>
+            </label>
+
+            <div class="grid-2">
+                <button type="submit" name="action" value="verify">▶ Verify Token</button>
+                <button type="submit" name="action" value="tamper_none">⚠️ Tamper: role=admin, alg=none</button>
+            </div>
+
+            <button type="submit" name="action" value="tamper_hs256">⚠️ Tamper: role=admin, keep old signature</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Verification Result</h2>
+
+        <p>
+            <span class="pill {% if result.result_class == 'success' %}pill-green{% else %}pill-red{% endif %}">
+                {{ result.result }}
+            </span>
+        </p>
+
+        <div class="mode-box">
+            <p><strong>Teaching Focus</strong></p>
+            <p class="hint">
+                A JWT is not encrypted. Anyone can edit the payload.
+                Security depends on rejecting modified tokens whose signature no longer matches.
+            </p>
+        </div>
+    </section>
+</div>
+
+<section class="card">
+    <h2>3. Decoded Token</h2>
+
+    <div class="grid-2">
+        <div class="mode-box">
+            <p><strong>Header</strong></p>
+            <div class="query wrap">{{ result.header }}</div>
+        </div>
+
+        <div class="mode-box">
+            <p><strong>Payload</strong></p>
+            <div class="query wrap">{{ result.payload }}</div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>4. Signature View</h2>
+
+    <div class="query wrap">
+signature = {{ result.signature }}
+    </div>
+
+    <p class="hint">
+        In the unsafe mode, the application accepts attacker-controlled token metadata.
+        In the safe mode, the server enforces the expected algorithm and recalculates the signature with its own secret.
+    </p>
+</section>
+
+<section class="card">
+    <h2>5. Decision Flow</h2>
+
+    <div class="mode-box">
+        {% for step in result.decision_steps %}
+            <p>{{ step }}</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="card">
+    <h2>Teaching Point</h2>
+
+    <div class="grid-2">
+        <div class="mode-box unsafe">
+            <p><span class="pill pill-red">Wrong</span></p>
+            <div class="query">“The token says admin, so the user is admin.”</div>
+        </div>
+
+        <div class="mode-box safe">
+            <p><span class="pill pill-green">Better</span></p>
+            <div class="query">“The token is only valid if the server can verify its integrity.”</div>
+        </div>
+    </div>
+</section>
+{% endblock %}
