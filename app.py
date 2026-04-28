@@ -11,6 +11,92 @@ from markupsafe import escape, Markup
 
 app = Flask(__name__)
 
+OWASP_NAV = [
+    {
+        "id": "a01",
+        "label": "A01 Broken Access Control",
+        "items": [
+            {"id": "a01_idor", "label": "Account Access / IDOR", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a02",
+        "label": "A02 Security Misconfiguration",
+        "items": [
+            {"id": "a02_soon", "label": "Coming Soon", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a03",
+        "label": "A03 Software Supply Chain Failures",
+        "items": [
+            {"id": "a03_soon", "label": "Coming Soon", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a04",
+        "label": "A04 Cryptographic Failures",
+        "items": [
+            {"id": "a04", "label": "Password Hashing", "endpoint": "cryptographic_failures"},
+            {"id": "a04_transit", "label": "Data in Transit", "endpoint": None},
+            {"id": "a04_keys", "label": "Key Management", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a05",
+        "label": "A05 Injection",
+        "items": [
+            {"id": "sql_login", "label": "SQL Injection", "endpoint": "sql_login"},
+            {"id": "command", "label": "Command Injection", "endpoint": "command_injection"},
+            {"id": "xss", "label": "Cross-Site Scripting", "endpoint": "xss_injection"},
+            {"id": "ldap", "label": "LDAP Injection", "endpoint": "ldap_injection"},
+            {"id": "xml", "label": "XML Injection", "endpoint": "xml_injection"},
+            {"id": "nosql", "label": "NoSQL Injection", "endpoint": "nosql_injection"},
+            {"id": "smuggling", "label": "HTTP Request Smuggling", "endpoint": "request_smuggling"},
+        ],
+    },
+    {
+        "id": "a06",
+        "label": "A06 Insecure Design",
+        "items": [
+            {"id": "a06_soon", "label": "Coming Soon", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a07",
+        "label": "A07 Authentication Failures",
+        "items": [
+            {"id": "a07_soon", "label": "Coming Soon", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a08",
+        "label": "A08 Software and Data Integrity Failures",
+        "items": [
+            {"id": "a08_soon", "label": "Coming Soon", "endpoint": None},
+        ],
+    },
+    {
+        "id": "a09",
+        "label": "A09 Security Logging and Alerting Failures",
+        "items": [
+            {"id": "a09", "label": "Login Attack Timeline", "endpoint": "logging_failures"},
+        ],
+    },
+    {
+        "id": "a10",
+        "label": "A10 Mishandling of Exceptional Conditions",
+        "items": [
+            {"id": "a10_soon", "label": "Coming Soon", "endpoint": None},
+        ],
+    },
+]
+
+
+@app.context_processor
+def inject_navigation():
+    return {"owasp_nav": OWASP_NAV}
+
 
 def highlight_sql(sql: str, user_values=None):
     user_values = user_values or []
@@ -871,6 +957,25 @@ def cryptographic_failures():
         mode=mode,
         result=result,
         methods=HASHING_METHODS,
+    )
+
+
+@app.route("/owasp/a09", methods=["GET", "POST"])
+def logging_failures():
+    mode = "unsafe"
+    if request.method == "POST":
+        mode = request.form.get("mode", "unsafe")
+
+    events, logs, detection, detection_class = simulate_logging(mode)
+
+    return render_template(
+        "owasp/a09.html",
+        active_page="a09",
+        mode=mode,
+        events=events,
+        logs=logs,
+        detection=detection,
+        detection_class=detection_class,
     )
 
 

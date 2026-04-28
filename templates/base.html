@@ -1,62 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{% block title %}Injection Visualizer{% endblock %}</title>
+    <title>{% block title %}OWASP Top 10:2025 Demonstrator{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/cyberrange.css') }}">
 </head>
 <body>
 
 <header class="topbar">
     <div>
-        <h1>Injection Visualizer</h1>
-        <p>Interactive teaching aids for OWASP-style injection concepts.</p>
+        <h1>OWASP Top 10:2025 Demonstrator</h1>
+        <p>Interactive teaching aids for OWASP security concepts.</p>
     </div>
 </header>
 
 <main class="layout">
     <aside class="card sidebar">
-        <h2>Modules</h2>
+        <h2>Navigation</h2>
 
         <nav class="nav">
-            <a class="{% if active_page == 'a04' %}active{% endif %}" href="{{ url_for('cryptographic_failures') }}">
-                🔑 A04 Cryptographic Failures
-            </a>
             <a class="{% if active_page == 'home' %}active{% endif %}" href="{{ url_for('index') }}">
-                🏠 Overview
-            </a>
-
-            <a class="{% if active_page == 'sql_login' %}active{% endif %}" href="{{ url_for('sql_login') }}">
-                🗄️ SQL Injection
-            </a>
-
-            <a class="{% if active_page == 'command' %}active{% endif %}" href="{{ url_for('command_injection') }}">
-                💻 Command Injection
-            </a>
-
-            <a class="{% if active_page == 'xss' %}active{% endif %}" href="{{ url_for('xss_injection') }}">
-                🌐 XSS
-            </a>
-
-            <a class="{% if active_page == 'ldap' %}active{% endif %}" href="{{ url_for('ldap_injection') }}">
-                📁 LDAP Injection
-            </a>
-            <a class="{% if active_page == 'xml' %}active{% endif %}" href="{{ url_for('xml_injection') }}">
-                🧾 XML Injection
-            </a>
-
-            <a class="{% if active_page == 'nosql' %}active{% endif %}" href="{{ url_for('nosql_injection') }}">
-                🍃 NoSQL Injection
-            </a>
-
-            <a class="{% if active_page == 'smuggling' %}active{% endif %}" href="{{ url_for('request_smuggling') }}">
-                📦 HTTP Request Smuggling
+                🏠 Home
             </a>
             <a class="{% if active_page == 'prevention_detection' %}active{% endif %}" href="{{ url_for('prevention_detection') }}">
-                🛡️ Prevention & Detection
+                🛡️ Prevention &amp; Detection
             </a>
+
+            {% for group in owasp_nav %}
+                {% set ns = namespace(group_active=false) %}
+                {% for item in group['items'] %}
+                    {% if active_page == item['id'] %}{% set ns.group_active = true %}{% endif %}
+                {% endfor %}
+                <div class="nav-group{% if ns.group_active %} nav-group-active{% endif %}">
+                    <span class="nav-group-label">{{ group['label'] }}</span>
+                    {% for item in group['items'] %}
+                        {% if item['endpoint'] %}
+                            <a class="nav-child {% if active_page == item['id'] %}active{% endif %}"
+                               href="{{ url_for(item['endpoint']) }}">{{ item['label'] }}</a>
+                        {% else %}
+                            <span class="nav-child nav-soon">{{ item['label'] }}</span>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endfor %}
         </nav>
-
-
     </aside>
 
     <section class="content">
